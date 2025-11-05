@@ -1,0 +1,93 @@
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api, setAuthToken } from '../services/api';
+
+const AuthContext = createContext();
+
+export const useAuth = () => {
+  return useContext(AuthContext);
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setAuthToken(null);
+    setUser(null);
+    setToken(null);
+    navigate('/login');
+  }, [navigate]);
+
+  useEffect(() => {
+    if (token) {
+      setAuthToken(token);
+      // You could add a 'verify' endpoint to check token validity on load
+      // For now, we'll just parse the user from localStorage
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('user'));
+        setUser(storedUser);
+      } catch (e) {
+        console.error("Could not parse user from localStorage", e);
+        logout(); // Clear bad data
+      }
+    }
+    setLoading(false);
+  }, [token, logout]);
+
+  // Set up axios interceptor to handle unauthorized errors
+  useEffect(() => {
+    // Response interceptor to handle unauthorized errors
+    const responseInterceptor = api.interceptors.response.use(
+      (response) => response, // On success, just return the response
+      (error) => {
+        // Check for 401 status code or "Unauthorized. Invalid token." message
+        if (
+          error.response &&
+          (error.response.status === 401 ||
+           (error.response.data &&
+            (error.response.data.message === 'Unauthorized. Invalid token.' ||
+             error.response.data.message?.includes('Invalid token') ||
+             error.response.data.message?.includes('Unauthorized'))))
+        ) {
+          // Token is invalid, logout and redirect to login
+          console.warn('Invalid token detected, redirecting to login...');
+          logout();
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on unmount
+    return () => {
+      api.interceptors.response.eject(responseInterceptor);
+    };
+  }, [logout]);
+
+  const login = (userData, userToken) => {
+    localStorage.setItem('token', userToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setAuthToken(userToken);
+    setUser(userData);
+    setToken(userToken);
+    navigate('/dashboard');
+  };
+
+  const value = {
+    user,
+    token,
+    login,
+    logout,
+    isAuthenticated: !!token,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+};
