@@ -6,9 +6,15 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
   const [currentPage, setCurrentPage] = useState(1);
 
   // Get all unique column headers from the data (handle empty data case)
-  // Exclude internal action fields
+  // Exclude internal action fields and id fields (but keep them in row data for edit/delete)
   const headers = data && data.length > 0 
-    ? Object.keys(data[0]).filter(key => !key.startsWith('_')) 
+    ? Object.keys(data[0]).filter(key => {
+        // Exclude fields starting with underscore (internal fields)
+        if (key.startsWith('_')) return false;
+        // Exclude fields ending with _id or just 'id' (but keep them in row data)
+        if (key.endsWith('_id') || key === 'id') return false;
+        return true;
+      })
     : [];
 
   // Helper to format header keys (e.g., 'rcm_id' -> 'Rcm Id', 'control_id' -> 'Control')

@@ -31,6 +31,7 @@ const Client = () => {
     try {
       const response = await getClients();
       const filteredData = response.data.map(item => ({
+        client_id: item.client_id || null, // Keep id for edit/delete
         client_name: item.client_name || '',
         industry: item.industry || '',
         region: item.region || '',
@@ -55,6 +56,7 @@ const Client = () => {
   // --- Form Handlers ---
   const handleModalOpen = (mode = 'create', client = null) => {
     if (mode === 'edit' && client) {
+      
       setSelectedClient(client);
       setForm({
         client_name: client.client_name || '',
@@ -95,6 +97,7 @@ const Client = () => {
 
     try {
       if (modalMode === 'edit' && selectedClient) {
+        console.log(selectedClient);
         await updateClient(selectedClient.client_id, form);
         setSubmissionStatus({ message: 'Client updated successfully.', variant: 'success' });
       } else {
@@ -164,7 +167,7 @@ const Client = () => {
             <>
               <i
                 className="fas fa-edit text-warning"
-                onClick={() => handleModalOpen(row)}
+                onClick={() => handleModalOpen('edit',row)}
                 style={{ cursor: 'pointer', marginRight: '5px', fontSize: '14px' }}
                 title="Edit"
               />

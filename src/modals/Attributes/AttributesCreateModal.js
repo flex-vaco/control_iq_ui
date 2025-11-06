@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner, Row, Col } from 'react-bootstrap';
-import { getRcmControls, api } from '../../services/api';
+import { api } from '../../services/api';
 
 const AttributesCreateModal = ({
   show,
