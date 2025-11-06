@@ -58,7 +58,7 @@ body {
 
 .content-wrapper {
   flex-grow: 1;
-  padding: 2.5rem;
+  padding: 0.5rem;
   background-color: var(--white);
   min-height: 100vh;
   overflow-x: hidden;

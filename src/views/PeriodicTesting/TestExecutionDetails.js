@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } from 'react-bootstrap';
-import { getTestExecutionById, checkTestExecutionEvidence } from '../../services/api';
+import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments } from '../../services/api';
 import { api } from '../../services/api';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
 
@@ -19,7 +19,9 @@ const TestExecutionDetails = () => {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [existingTestResult, setExistingTestResult] = useState(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [processingDocumentId, setProcessingDocumentId] = useState(null); // Track which document is being processed
   const [evidenceStatusMap, setEvidenceStatusMap] = useState({}); // Map of document_id to status info
+  const [reportData, setReportData] = useState([]); // Data for Report tab
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -74,6 +76,19 @@ const TestExecutionDetails = () => {
           );
           setEvidenceStatusMap(statusMap);
         }
+
+        // Fetch report data (test execution evidence documents)
+        if (response.data.test_execution) {
+          try {
+            const reportResponse = await getTestExecutionEvidenceDocuments(
+              response.data.test_execution.test_execution_id
+            );
+            setReportData(reportResponse.data.data || []);
+          } catch (err) {
+            console.error('Error fetching report data:', err);
+            setReportData([]);
+          }
+        }
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch test execution details.');
         console.error(err);
@@ -105,6 +120,7 @@ const TestExecutionDetails = () => {
       display_artifact_url: getDocumentUrl(doc.artifact_url)
     };
     
+    setProcessingDocumentId(doc.document_id); // Set which document is being processed
     setCheckingExisting(true);
     try {
       // Check if test_execution_evidence_documents has records
@@ -144,10 +160,22 @@ const TestExecutionDetails = () => {
               (typeof doc.evidence_ai_details === 'object' && Object.keys(doc.evidence_ai_details).length === 0);
           
           if (needsAIDetails) {
-            await api.post('/data/evidence-ai-details', {
+            const aiDetailsResponse = await api.post('/data/evidence-ai-details', {
               evidence_document_id: doc.document_id,
               evidence_url: doc.artifact_url
             });
+            // Update documentData with the fetched evidence_ai_details
+            if (aiDetailsResponse.data && aiDetailsResponse.data.extracted_text) {
+              documentData.evidence_ai_details = aiDetailsResponse.data.extracted_text;
+              // Also update the evidenceDocuments state so the data stays in sync
+              setEvidenceDocuments(prevDocs => 
+                prevDocs.map(prevDoc => 
+                  prevDoc.document_id === doc.document_id 
+                    ? { ...prevDoc, evidence_ai_details: aiDetailsResponse.data.extracted_text }
+                    : prevDoc
+                )
+              );
+            }
             // Small delay to ensure database update is committed
             await new Promise(resolve => setTimeout(resolve, 100));
           }
@@ -228,6 +256,7 @@ const TestExecutionDetails = () => {
       setShowMarkEvidenceFileModal(true);
     } finally {
       setCheckingExisting(false);
+      setProcessingDocumentId(null); // Clear processing state
     }
   };
 
@@ -407,9 +436,23 @@ const TestExecutionDetails = () => {
                                 variant="outline-primary" 
                                 size="sm"
                                 onClick={() => handleMarkEvidenceFile(doc)}
-                                disabled={checkingExisting}
+                                disabled={processingDocumentId !== null}
                               >
-                                {checkingExisting ? 'Checking...' : (hasRecord ? 'Mark' : 'Test & Mark')}
+                                {processingDocumentId === doc.document_id ? (
+                                  <>
+                                    <Spinner
+                                      as="span"
+                                      animation="border"
+                                      size="sm"
+                                      role="status"
+                                      aria-hidden="true"
+                                      className="me-2"
+                                    />
+                                    Getting Analysis Details
+                                  </>
+                                ) : (
+                                  hasRecord ? 'Mark' : 'Test & Mark'
+                                )}
                               </Button>
                             </td>
                           </tr>
@@ -428,7 +471,47 @@ const TestExecutionDetails = () => {
             {/* Report Tab */}
             <Tab eventKey="report" title="Report">
               <div className="mt-3">
-                <Alert variant="info">Report data will be displayed here.</Alert>
+                <h5>Test Execution Report</h5>
+                {reportData.length > 0 ? (
+                  <Table striped bordered hover responsive>
+                    <thead>
+                      <tr>
+                        <th>Evidence Name</th>
+                        <th>Summary</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.map((record) => {
+                        // Parse status: 1 = Pass, 0 = Fail, null = Pending
+                        let statusDisplay = 'Pending';
+                        let statusClass = 'text-warning';
+                        if (record.status === 1 || record.status === true || record.status === '1' || record.status === 'true') {
+                          statusDisplay = 'Pass';
+                          statusClass = 'text-success';
+                        } else if (record.status === 0 || record.status === false || record.status === '0' || record.status === 'false') {
+                          statusDisplay = 'Fail';
+                          statusClass = 'text-danger';
+                        }
+
+                        // Get summary from result_parsed
+                        const summary = record.result_parsed?.summary || '-';
+
+                        return (
+                          <tr key={record.id}>
+                            <td>{record.evidence_name || '-'}</td>
+                            <td>{summary}</td>
+                            <td className={statusClass}>
+                              <strong>{statusDisplay}</strong>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                ) : (
+                  <Alert variant="info">No test execution evidence documents found. Complete testing on evidence documents to see results here.</Alert>
+                )}
               </div>
             </Tab>
           </Tabs>
@@ -457,6 +540,13 @@ const TestExecutionDetails = () => {
                 }));
               }
             }).catch(err => console.error('Error refreshing status:', err));
+            
+            // Refresh report data
+            getTestExecutionEvidenceDocuments(testExecution.test_execution_id)
+              .then(reportResponse => {
+                setReportData(reportResponse.data.data || []);
+              })
+              .catch(err => console.error('Error refreshing report data:', err));
           }
         }}
         documentData={selectedDocument}

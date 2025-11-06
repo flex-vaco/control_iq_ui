@@ -109,6 +109,12 @@ export const checkTestExecutionEvidence = (testExecutionId, evidenceDocumentId) 
   });
 };
 
+export const getTestExecutionEvidenceDocuments = (testExecutionId) => {
+  return api.get('/data/test-execution-evidence-documents', { 
+    params: { test_execution_id: testExecutionId } 
+  });
+};
+
 // Legacy exports for backward compatibility during migration
 export const getCompanies = getClients;
 export const getCompanyById = getClientById;
