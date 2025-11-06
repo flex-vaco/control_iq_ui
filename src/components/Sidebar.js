@@ -32,6 +32,11 @@ const Sidebar = () => {
           </Nav.Link>
         </Nav.Item>
         <Nav.Item>
+          <Nav.Link as={NavLink} to="/client" id="nav-client">
+            Client
+          </Nav.Link>
+        </Nav.Item>
+        <Nav.Item>
           <Nav.Link as={NavLink} to="/rcm" id="nav-rcm">
             RCM
           </Nav.Link>
@@ -46,11 +51,7 @@ const Sidebar = () => {
             Attributes
           </Nav.Link>
         </Nav.Item>
-        <Nav.Item>
-          <Nav.Link as={NavLink} to="/client" id="nav-client">
-            Client
-          </Nav.Link>
-        </Nav.Item>
+        
         <Nav.Item>
           <Nav.Link
             onClick={(e) => {

@@ -4,6 +4,7 @@ import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } f
 import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments } from '../../services/api';
 import { api } from '../../services/api';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
+import ReportModal from '../../modals/PeriodicTesting/ReportModal';
 
 const TestExecutionDetails = () => {
   const { id } = useParams();
@@ -18,10 +19,12 @@ const TestExecutionDetails = () => {
   const [showMarkEvidenceFileModal, setShowMarkEvidenceFileModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [existingTestResult, setExistingTestResult] = useState(null);
+   // eslint-disable-next-line no-unused-vars
   const [checkingExisting, setCheckingExisting] = useState(false);
   const [processingDocumentId, setProcessingDocumentId] = useState(null); // Track which document is being processed
   const [evidenceStatusMap, setEvidenceStatusMap] = useState({}); // Map of document_id to status info
   const [reportData, setReportData] = useState([]); // Data for Report tab
+  const [showReportModal, setShowReportModal] = useState(false); // State for Report modal
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -471,7 +474,12 @@ const TestExecutionDetails = () => {
             {/* Report Tab */}
             <Tab eventKey="report" title="Report">
               <div className="mt-3">
-                <h5>Test Execution Report</h5>
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h5 className="mb-0">Test Execution Report</h5>
+                  <Button variant="primary" onClick={() => setShowReportModal(true)}>
+                    Overview
+                  </Button>
+                </div>
                 {reportData.length > 0 ? (
                   <Table striped bordered hover responsive>
                     <thead>
@@ -553,6 +561,15 @@ const TestExecutionDetails = () => {
         testExecution={testExecution}
         rcmDetails={rcmDetails}
         existingTestResult={existingTestResult}
+      />
+
+      <ReportModal
+        show={showReportModal}
+        onHide={() => setShowReportModal(false)}
+        testExecution={testExecution}
+        rcmDetails={rcmDetails}
+        testAttributes={testAttributes}
+        evidenceDocuments={evidenceDocuments}
       />
     </Container>
   );
