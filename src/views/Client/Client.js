@@ -143,7 +143,7 @@ const Client = () => {
   return (
     <div id="client-page">
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h3 className="mb-0">Clients</h3>
+        <h4 className="mb-0">Clients</h4>
         <Button 
           variant="primary" 
           onClick={() => handleModalOpen('create')}

@@ -11,7 +11,8 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
     ? Object.keys(data[0]).filter(key => {
         // Exclude fields starting with underscore (internal fields)
         if (key.startsWith('_')) return false;
-        // Exclude fields ending with _id or just 'id' (but keep them in row data)
+        // Exclude fields ending with _id or just 'id' (but keep control_id and them in row data)
+        if (key === 'control_id') return true; // Always show control_id
         if (key.endsWith('_id') || key === 'id') return false;
         return true;
       })

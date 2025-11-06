@@ -175,7 +175,7 @@ const PeriodicTesting = () => {
   return (
     <div id="periodic-testing-page">
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h3 className="mb-0">Periodic Testing</h3>
+        <h4 className="mb-0">Periodic Testing</h4>
         <Button 
           variant="primary" 
           onClick={handleModalOpen}
