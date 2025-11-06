@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button, Row, Col } from 'react-bootstrap';
-import { Stage, Layer, Rect, Text, Circle, Image as KonvaImageComp } from 'react-konva';
+import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
 import { api } from '../../services/api';
 
-const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, existingTestResult }) => {
+const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmDetails, existingTestResult }) => {
   const [expandedSections, setExpandedSections] = useState({
-    evidenceDetails: true, // Default open
+    evidenceDetails: true,
     testResults: false
   });
   const [loading, setLoading] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const processedRef = useRef(null);
   
-  // Drawing state
   const [rectangles, setRectangles] = useState([]);
   const [newRect, setNewRect] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -26,8 +25,8 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const stageRef = useRef();
   const canvasContainerRef = useRef();
+  const initialRectanglesRef = useRef([]); 
 
-  // ----- CANVAS SIZE CALCULATION -----
   useEffect(() => {
     if (!show) return;
     
@@ -41,7 +40,6 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
       }
     };
 
-    // Small delay to ensure DOM is ready
     const timeoutId = setTimeout(updateCanvasSize, 100);
     window.addEventListener('resize', updateCanvasSize);
     
@@ -51,7 +49,6 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
     };
   }, [show]);
 
-  // ----- FIT IMAGE TO SCREEN -----
   const fitImageToScreen = useCallback(() => {
     if (!konvaImage || !stageRef.current || !canvasContainerRef.current) return;
     
@@ -65,13 +62,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
     
     if (imageWidth === 0 || imageHeight === 0) return;
     
-    // Calculate scale to fit image within container with padding
     const padding = 20;
     const scaleX = (containerWidth - padding * 2) / imageWidth;
     const scaleY = (containerHeight - padding * 2) / imageHeight;
-    const fitScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 1
+    const fitScale = Math.min(scaleX, scaleY, 1); 
     
-    // Reset stage scale first, then apply new scale
     stage.scale({ x: 1, y: 1 });
     stage.position({ x: 0, y: 0 });
     
@@ -90,40 +85,88 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
 
   // ----- IMAGE LOADING -----
   useEffect(() => {
-    if (documentData && documentData.display_artifact_url) {
+    let imageUrl = null;
+    
+    if (documentData) {
+      if (existingTestResult && existingTestResult.result_artifact_url) {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        const baseUrl = apiUrl.replace('/api', '');
+        const resultUrl = existingTestResult.result_artifact_url;
+        if (resultUrl.startsWith('uploads/')) {
+          imageUrl = `${baseUrl}/${resultUrl}`;
+        } else if (resultUrl.startsWith('executionevidence/')) {
+          imageUrl = `${baseUrl}/uploads/${resultUrl}`;
+        } else {
+          imageUrl = `${baseUrl}/uploads/${resultUrl}`;
+        }
+      } else if (documentData.display_artifact_url) {
+        imageUrl = documentData.display_artifact_url;
+      }
+    }
+    
+    if (imageUrl) {
       const img = new window.Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
         setKonvaImage(img);
       };
       img.onerror = () => {
-        console.error('Failed to load image');
+        console.error('Failed to load image from:', imageUrl);
         setKonvaImage(null);
       };
-      img.src = documentData.display_artifact_url;
+      img.src = imageUrl;
     } else {
       setKonvaImage(null);
     }
-    // Reset drawing state when document changes
     setRectangles([]);
     setNewRect(null);
     setUndoStack([]);
     setRedoStack([]);
     setScale(1);
     setStagePosition({ x: 0, y: 0 });
-  }, [documentData]);
+    initialRectanglesRef.current = []; // Reset initial state
+  }, [documentData, existingTestResult]);
 
-  // Fit image when it loads or canvas size changes
   useEffect(() => {
     if (konvaImage && canvasSize.width > 0 && canvasSize.height > 0) {
-      // Small delay to ensure stage is ready
       setTimeout(() => {
         fitImageToScreen();
       }, 100);
+      
+      const timer = setTimeout(() => {
+        if (initialRectanglesRef.current.length === 0) {
+          initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
+        }
+      }, 200);
+      
+      return () => clearTimeout(timer);
     }
-  }, [konvaImage, canvasSize, fitImageToScreen]);
+  }, [konvaImage, canvasSize, fitImageToScreen, rectangles]);
 
-  // ----- HISTORY MANAGEMENT -----
+  useEffect(() => {
+    if (konvaImage && initialRectanglesRef.current.length === 0 && rectangles.length === 0) {
+      initialRectanglesRef.current = [];
+    } else if (konvaImage && initialRectanglesRef.current.length === 0 && rectangles.length > 0) {
+      const timer = setTimeout(() => {
+        initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [konvaImage, rectangles]);
+
+  const rectanglesChanged = useCallback(() => {
+    if (rectangles.length !== initialRectanglesRef.current.length) {
+      return true;
+    }
+    
+    const currentSorted = [...rectangles].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+    const initialSorted = [...initialRectanglesRef.current].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+    
+    return JSON.stringify(currentSorted) !== JSON.stringify(initialSorted);
+  }, [rectangles]);
+
+  const hasChanges = rectanglesChanged();
+
   const pushHistory = () => {
     setUndoStack((prev) => [...prev, rectangles]);
     setRedoStack([]); // clear redo when new action happens
@@ -183,18 +226,30 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
   const handleMouseUp = () => {
     if (newRect && Math.abs(newRect.width) > 10 && Math.abs(newRect.height) > 10) {
       const label = window.prompt("Enter label:", "");
+      if (label) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.font = 'bold 11px Arial';
+        const textWidth = ctx.measureText(label).width;
+        const padding = 6; // Padding around text
+        const labelWidth = textWidth + padding * 2;
+        const labelHeight = 16; // Fixed height for label
+        
       const centerY = newRect.y + newRect.height / 2;
       const rightX = newRect.x + newRect.width + 10;
 
       const rect = {
         ...newRect,
-        label: label || "",
+          label: label,
         badgeX: rightX,
         badgeY: centerY,
+          labelWidth: labelWidth,
+          labelHeight: labelHeight,
       };
       pushHistory(); // Save current state before making changes
       const nextRects = [...rectangles, rect];
       setRectangles(nextRects);
+      }
     }
     setNewRect(null);
   };
@@ -230,16 +285,16 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
   };
 
   // ----- DOWNLOAD -----
-  const handleDownload = () => {
-    if (!stageRef.current) return;
-    const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
-    const link = document.createElement("a");
-    link.download = "annotated-image.png";
-    link.href = uri;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  // const handleDownload = () => {
+  //   if (!stageRef.current) return;
+  //   const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
+  //   const link = document.createElement("a");
+  //   link.download = "annotated-image.png";
+  //   link.href = uri;
+  //   document.body.appendChild(link);
+  //   link.click();
+  //   document.body.removeChild(link);
+  // };
 
   const compareAttributes = useCallback(async () => {
     if (!documentData || !testExecution) return;
@@ -282,29 +337,23 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
   }, [documentData, compareAttributes]);
 
   useEffect(() => {
-    // Only proceed if modal is shown and documentData exists (not null)
     if (!show || !documentData) {
       processedRef.current = null; // Reset when modal closes
       setTestResults(null);
       return;
     }
     
-    // If existing test result is provided, use it and don't run fetch/compare
-    // (Processing is done before opening the popup in TestExecutionDetails)
     if (existingTestResult && existingTestResult.results) {
       setTestResults(existingTestResult.results);
       processedRef.current = documentData.document_id;
       return;
     }
     
-    // If no existing result but we have test results in state, keep them
-    // (This handles the case where processing completed in the parent component)
     if (testResults) {
       processedRef.current = documentData.document_id;
       return;
     }
     
-    // Prevent double execution for the same document (handles React StrictMode double renders)
     const documentId = documentData.document_id;
     if (processedRef.current === documentId) {
       return; // Already processed this document
@@ -312,8 +361,6 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
     
     processedRef.current = documentId;
     
-    // Only run fetchEvidenceAIDetails and compareAttributes if no existing result
-    // This is a fallback in case the parent component didn't handle it
     if (!documentData.evidence_ai_details || 
         (typeof documentData.evidence_ai_details === 'object' && Object.keys(documentData.evidence_ai_details).length === 0)) {
       fetchEvidenceAIDetails();
@@ -324,12 +371,10 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
 
   const toggleSection = (section) => {
     setExpandedSections(prev => {
-      // Close all sections first, then open the clicked one if it was closed
       const newState = {
         evidenceDetails: false,
         testResults: false
       };
-      // If the clicked section was closed, open it
       if (!prev[section]) {
         newState[section] = true;
       }
@@ -337,8 +382,151 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
     });
   };
 
-  const handleSave = () => {
-    onHide();
+  const handleSave = async () => {
+    if (!stageRef.current || !testExecution || !documentData || !konvaImage) {
+      alert('Unable to save: Missing required data.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let controlId = '';
+      
+      if (testExecution && testExecution.control_id) {
+        controlId = String(testExecution.control_id).trim();
+      }
+      
+      if (!controlId && rcmDetails && rcmDetails.control_id) {
+        controlId = String(rcmDetails.control_id).trim();
+      }
+      
+      if (!controlId && testExecution && testExecution.rcm_details && testExecution.rcm_details.control_id) {
+        controlId = String(testExecution.rcm_details.control_id).trim();
+      }
+      
+      if (!controlId || controlId === '' || controlId === 'undefined') {
+        alert('Unable to save: Control ID not found. Please check the test execution data.');
+        console.error('Control ID missing. testExecution:', testExecution, 'rcmDetails:', rcmDetails);
+        setLoading(false);
+        return;
+      }
+
+      const originalWidth = konvaImage.width;
+      const originalHeight = konvaImage.height;
+
+      const currentStage = stageRef.current;
+      const imageLayer = currentStage.findOne('Image');
+      if (!imageLayer) {
+        throw new Error('Could not find image layer');
+      }
+
+      const displayedImageWidth = imageLayer.width();
+      const displayedImageHeight = imageLayer.height();
+      
+      const scaleX = originalWidth / displayedImageWidth;
+      const scaleY = originalHeight / displayedImageHeight;
+
+      const tempStage = new window.Konva.Stage({
+        container: document.createElement('div'),
+        width: originalWidth,
+        height: originalHeight,
+      });
+
+      const tempLayer = new window.Konva.Layer();
+      tempStage.add(tempLayer);
+
+      // Add original image at full size
+      const tempImage = new window.Konva.Image({
+        image: konvaImage,
+        width: originalWidth,
+        height: originalHeight,
+      });
+      tempLayer.add(tempImage);
+
+      rectangles.forEach((rect) => {
+        const origX = rect.x * scaleX;
+        const origY = rect.y * scaleY;
+        const origWidth = rect.width * scaleX;
+        const origHeight = rect.height * scaleY;
+
+        const tempRect = new window.Konva.Rect({
+          x: origX,
+          y: origY,
+          width: origWidth,
+          height: origHeight,
+          stroke: rect.color,
+          strokeWidth: 2 * scaleX, // Scale stroke width proportionally
+        });
+        tempLayer.add(tempRect);
+
+        if (rect.label) {
+          const labelOrigX = rect.badgeX * scaleX;
+          const labelOrigY = rect.badgeY * scaleY;
+          const labelWidth = (rect.labelWidth || 40) * scaleX;
+          const labelHeight = (rect.labelHeight || 16) * scaleY;
+
+          const labelBg = new window.Konva.Rect({
+            x: labelOrigX,
+            y: labelOrigY - labelHeight / 2,
+            width: labelWidth,
+            height: labelHeight,
+            fill: rect.color,
+            cornerRadius: 3 * scaleX,
+            stroke: 'white',
+            strokeWidth: 1 * scaleX,
+          });
+          tempLayer.add(labelBg);
+
+          // Add label text
+          const labelText = new window.Konva.Text({
+            x: labelOrigX,
+            y: labelOrigY - labelHeight / 2 + 2 * scaleX,
+            text: rect.label,
+            fontSize: 11 * scaleX,
+            fill: textColor,
+            fontStyle: 'bold',
+            align: 'center',
+            width: labelWidth,
+            verticalAlign: 'middle',
+            height: labelHeight,
+          });
+          tempLayer.add(labelText);
+        }
+      });
+
+      const dataURL = tempStage.toDataURL({ 
+        pixelRatio: 1, 
+        mimeType: 'image/png',
+        quality: 1
+      });
+
+      tempStage.destroy();
+
+      const response = await fetch(dataURL);
+      const blob = await response.blob();
+
+      const formData = new FormData();
+      formData.append('image', blob, 'annotated-image.png');
+      formData.append('test_execution_id', testExecution.test_execution_id);
+      formData.append('evidence_document_id', documentData.document_id);
+      formData.append('control_id', String(controlId)); // Ensure it's a string
+
+      await api.post('/data/save-annotated-image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
+
+      alert('Image saved successfully!');
+      onHide();
+    } catch (error) {
+      console.error('Error saving image:', error);
+      alert(error.response?.data?.message || 'Failed to save image. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -458,7 +646,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
                 </div>
                 
                 {expandedSections.evidenceDetails && documentData && (
-                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem', maxHeight: '50vh', overflowY: 'auto' }}>
                     {renderEvidenceDetails(documentData.evidence_ai_details)}
                   </div>
                 )}
@@ -568,7 +756,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
             flexDirection: 'column',
             padding: '0.2rem'
           }}>
-            {documentData && documentData.display_artifact_url ? (
+            {documentData && (documentData.display_artifact_url || (existingTestResult && existingTestResult.result_artifact_url)) ? (
               <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {/* Drawing Controls */}
                 <div style={{ 
@@ -660,7 +848,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
                     🔍 Fit to Screen
                   </button>
 
-                  <button
+                  {/* <button
                     onClick={handleDownload}
                     style={{
                       background: "#4CAF50",
@@ -673,7 +861,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
                     }}
                   >
                     ⬇️ Download
-                  </button>
+                  </button> */}
                 </div>
 
                 {/* Konva Canvas */}
@@ -718,21 +906,27 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
                             />
                             {rect.label && (
                               <>
-                                <Circle
+                                <Rect
                                   x={rect.badgeX}
-                                  y={rect.badgeY}
-                                  radius={10}
+                                  y={rect.badgeY - (rect.labelHeight || 16) / 2}
+                                  width={rect.labelWidth || 40}
+                                  height={rect.labelHeight || 16}
                                   fill={rect.color}
+                                  cornerRadius={3}
                                   stroke="white"
-                                  strokeWidth={1.5}
+                                  strokeWidth={1}
                                 />
                                 <Text
-                                  x={rect.badgeX - 5}
-                                  y={rect.badgeY - 7}
+                                  x={rect.badgeX}
+                                  y={rect.badgeY - (rect.labelHeight || 16) / 2 + 2}
                                   text={rect.label}
                                   fontSize={11}
                                   fill={textColor}
                                   fontStyle="bold"
+                                  align="center"
+                                  width={rect.labelWidth || 40}
+                                  verticalAlign="middle"
+                                  height={rect.labelHeight || 16}
                                 />
                               </>
                             )}
@@ -784,11 +978,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, exis
       </Modal.Body>
 
       <Modal.Footer>
-        <Button variant="secondary" onClick={handleCancel}>
+        <Button variant="secondary" onClick={handleCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSave}>
-          Save
+        <Button variant="primary" onClick={handleSave} disabled={loading || !hasChanges}>
+          {loading ? 'Saving...' : 'Save'}
         </Button>
       </Modal.Footer>
     </Modal>

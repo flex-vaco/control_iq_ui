@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Alert, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
 import { getClients, getRcmData, getTestExecutions, createTestExecution } from '../../services/api';
 import PeriodicTestingModal from '../../modals/PeriodicTesting/PeriodicTestingModal';
@@ -124,7 +125,22 @@ const PeriodicTesting = () => {
       // Refresh test executions data
       await fetchTestingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create test execution.');
+      const errorMessage = err.response?.data?.message || 'Failed to create test execution.';
+      const errorCode = err.response?.data?.code;
+      
+      // If no evidence found, show SweetAlert
+      if (errorCode === 'NO_EVIDENCE_FOUND' || errorMessage.includes('No PBC found')) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'No PBC Found',
+          text: 'No PBC found with given Period and control. Please choose a different set.',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#286070'
+        });
+      } else {
+        // For other errors, show in error state
+        setError(errorMessage);
+      }
       console.error(err);
     } finally {
       setLoading(false);

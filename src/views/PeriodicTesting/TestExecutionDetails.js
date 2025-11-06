@@ -19,6 +19,7 @@ const TestExecutionDetails = () => {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [existingTestResult, setExistingTestResult] = useState(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [evidenceStatusMap, setEvidenceStatusMap] = useState({}); // Map of document_id to status info
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -31,8 +32,48 @@ const TestExecutionDetails = () => {
         const response = await getTestExecutionById(id);
         setTestExecution(response.data.test_execution);
         setRcmDetails(response.data.rcm_details);
-        setEvidenceDocuments(response.data.evidence_documents || []);
+        const evidenceDocs = response.data.evidence_documents || [];
+        setEvidenceDocuments(evidenceDocs);
         setTestAttributes(response.data.test_attributes || []);
+        
+        // Check status for each evidence document
+        if (response.data.test_execution && evidenceDocs.length > 0) {
+          const statusMap = {};
+          await Promise.all(
+            evidenceDocs.map(async (doc) => {
+              try {
+                const statusResponse = await checkTestExecutionEvidence(
+                  response.data.test_execution.test_execution_id,
+                  doc.document_id
+                );
+                if (statusResponse.data.exists) {
+                  const statusValue = statusResponse.data.data.status;
+                  // Status is stored as tinyint(1): 1 = Pass, 0 = Fail, NULL = not set
+                  // Debug: log the actual value to see what we're getting
+                  if (statusValue === null || statusValue === undefined) {
+                    console.log(`Warning: Document ${doc.document_id} has record but status is ${statusValue}`, statusResponse.data.data);
+                  }
+                  statusMap[doc.document_id] = {
+                    exists: true,
+                    status: statusValue // This will be 1, 0, or null
+                  };
+                } else {
+                  statusMap[doc.document_id] = {
+                    exists: false,
+                    status: null
+                  };
+                }
+              } catch (err) {
+                console.error(`Error checking status for document ${doc.document_id}:`, err);
+                statusMap[doc.document_id] = {
+                  exists: false,
+                  status: null
+                };
+              }
+            })
+          );
+          setEvidenceStatusMap(statusMap);
+        }
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch test execution details.');
         console.error(err);
@@ -74,7 +115,23 @@ const TestExecutionDetails = () => {
       
       if (response.data.exists) {
         // Record exists, set the existing result and open modal
-        setExistingTestResult(response.data.data);
+        const existingData = response.data.data;
+        setExistingTestResult(existingData);
+        
+        // Update status map
+        setEvidenceStatusMap(prev => ({
+          ...prev,
+          [doc.document_id]: {
+            exists: true,
+            status: existingData.status
+          }
+        }));
+        
+        // If result_artifact_url exists, use it instead of the original artifact_url
+        if (existingData.result_artifact_url) {
+          documentData.display_artifact_url = getDocumentUrl(existingData.result_artifact_url);
+        }
+        
         setSelectedDocument(documentData);
         setShowMarkEvidenceFileModal(true);
       } else {
@@ -112,18 +169,44 @@ const TestExecutionDetails = () => {
           );
           
           // Use the results from compareAttributes response and combine with record data
+          let existingResultData = null;
           if (newRecordResponse.data.exists && compareResponse.data && compareResponse.data.results) {
-            setExistingTestResult({
+            existingResultData = {
               ...newRecordResponse.data.data,
               results: compareResponse.data.results
-            });
+            };
           } else if (compareResponse.data && compareResponse.data.results) {
             // Fallback: use results even if record fetch failed
-            setExistingTestResult({
+            existingResultData = {
               results: compareResponse.data.results
-            });
-          } else {
-            setExistingTestResult(null);
+            };
+            // If we have the record data, check for result_artifact_url
+            if (newRecordResponse.data.exists && newRecordResponse.data.data) {
+              existingResultData = {
+                ...newRecordResponse.data.data,
+                ...existingResultData
+              };
+            }
+          } else if (newRecordResponse.data.exists) {
+            existingResultData = newRecordResponse.data.data;
+          }
+          
+          // Update status map
+          if (newRecordResponse.data.exists && newRecordResponse.data.data) {
+            setEvidenceStatusMap(prev => ({
+              ...prev,
+              [doc.document_id]: {
+                exists: true,
+                status: newRecordResponse.data.data.status
+              }
+            }));
+          }
+          
+          setExistingTestResult(existingResultData);
+          
+          // If result_artifact_url exists, use it instead of the original artifact_url
+          if (existingResultData && existingResultData.result_artifact_url) {
+            documentData.display_artifact_url = getDocumentUrl(existingResultData.result_artifact_url);
           }
           
           // Step 4: Open modal with the results
@@ -150,7 +233,7 @@ const TestExecutionDetails = () => {
 
   if (loading) {
     return (
-      <Container className="mt-4">
+      <Container>
         <div className="text-center">
           <Spinner animation="border" />
           <p className="mt-3">Loading test execution details...</p>
@@ -161,7 +244,7 @@ const TestExecutionDetails = () => {
 
   if (error) {
     return (
-      <Container className="mt-4">
+      <Container>
         <Alert variant="danger">{error}</Alert>
         <Button variant="secondary" onClick={() => navigate('/periodic-testing')}>
           Back to Periodic Testing
@@ -172,7 +255,7 @@ const TestExecutionDetails = () => {
 
   if (!testExecution || !rcmDetails) {
     return (
-      <Container className="mt-4">
+      <Container>
         <Alert variant="warning">Test execution not found.</Alert>
         <Button variant="secondary" onClick={() => navigate('/periodic-testing')}>
           Back to Periodic Testing
@@ -182,7 +265,7 @@ const TestExecutionDetails = () => {
   }
 
   return (
-    <Container className="mt-4">
+    <Container>
       <Row className="mb-3">
         <Col>
           <Button variant="secondary" onClick={() => navigate('/periodic-testing')}>
@@ -194,28 +277,26 @@ const TestExecutionDetails = () => {
       {/* Consolidated Information Section */}
       <Card className="mb-4">
         <Card.Header>
-          <h4 className="mb-0">Test Execution Details</h4>
+          <h6 className="mb-0">Test Execution Details</h6>
         </Card.Header>
-        <Card.Body>
+        <Card.Body className="pt-1 pb-1 pl-4 pr-4">
           <Row>
-            <Col md={2} className="mb-2">
-              <strong>Client:</strong> {testExecution.client_name || '-'}
+            <Col md={2} className="pl-0">
+              <strong><i className="fas fa-building"></i></strong> {testExecution.client_name || '-'}
             </Col>
-            <Col md={2} className="mb-2">
-              <strong>Year:</strong> {testExecution.year || '-'}
+            <Col md={2} className="pl-0">
+              <strong><i className="fas fa-key"></i></strong> {testExecution.control_id || '-'}
             </Col>
-            <Col md={2} className="mb-2">
-              <strong>Quarter:</strong> {testExecution.quarter || '-'}
+            <Col md={2} className="pl-0">
+              <strong><i className="fas fa-calendar-alt"></i></strong> {testExecution.year || '-'} - {testExecution.quarter || '-'}
             </Col>
-            <Col md={2} className="mb-2">
-              <strong>Process:</strong> {testExecution.process || '-'}
+            <Col md={3} className="pl-0">
+              <strong><i className="fas fa-project-diagram"></i></strong> {testExecution.process || '-'}
             </Col>
-            <Col md={2} className="mb-2">
-              <strong>Classification:</strong> {rcmDetails.classification || '-'}
+            <Col md={3} className="pl-0">
+              <strong><i className="fas fa-shield-alt"></i></strong> {rcmDetails.classification || '-'}
             </Col>
-            <Col md={2} className="mb-2">
-              <strong>Control ID:</strong> {testExecution.control_id || '-'}
-            </Col>
+            
           </Row>
         </Card.Body>
       </Card>
@@ -284,36 +365,56 @@ const TestExecutionDetails = () => {
                       <tr>
                         <th>Name</th>
                         <th>Document Link</th>
+                        <th>Status</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {evidenceDocuments.map((doc) => (
-                        <tr key={doc.document_id}>
-                          <td>{doc.evidence_name || '-'}</td>
-                          <td>
-                            <a 
-                              href={getDocumentUrl(doc.artifact_url)} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary"
-                            >
-                              <i className="fas fa-external-link-alt me-2"></i>
-                              View Document
-                            </a>
-                          </td>
-                          <td>
-                            <Button 
-                              variant="outline-primary" 
-                              size="sm"
-                              onClick={() => handleMarkEvidenceFile(doc)}
-                              disabled={checkingExisting}
-                            >
-                              {checkingExisting ? 'Checking...' : 'Test & Mark'}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                      {evidenceDocuments.map((doc) => {
+                        const statusInfo = evidenceStatusMap[doc.document_id];
+                        const hasRecord = statusInfo?.exists || false;
+                        const status = statusInfo?.status;
+                        let statusDisplay = 'Pending Test';
+                        if (hasRecord) {
+                          if (status === 1 || status === true || status === '1' || status === 'true') {
+                            statusDisplay = 'Pass';
+                          } else if (status === 0 || status === false || status === '0' || status === 'false') {
+                            statusDisplay = 'Fail';
+                          } else {
+                            statusDisplay = 'Pending Test';
+                          }
+                        }
+                        
+                        return (
+                          <tr key={doc.document_id}>
+                            <td>{doc.evidence_name || '-'}</td>
+                            <td>
+                              <a 
+                                href={getDocumentUrl(doc.artifact_url)} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary"
+                              >
+                                <i className="fas fa-external-link-alt me-2"></i>
+                                View Document
+                              </a>
+                            </td>
+                            <td>
+                              {statusDisplay}
+                            </td>
+                            <td>
+                              <Button 
+                                variant="outline-primary" 
+                                size="sm"
+                                onClick={() => handleMarkEvidenceFile(doc)}
+                                disabled={checkingExisting}
+                              >
+                                {checkingExisting ? 'Checking...' : (hasRecord ? 'Mark' : 'Test & Mark')}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 ) : (
@@ -337,12 +438,30 @@ const TestExecutionDetails = () => {
       <MarkEvidenceFileModal
         show={showMarkEvidenceFileModal}
         onHide={() => {
+          const currentDocId = selectedDocument?.document_id;
           setShowMarkEvidenceFileModal(false);
           setSelectedDocument(null);
           setExistingTestResult(null);
+          if (currentDocId && testExecution) {
+            checkTestExecutionEvidence(
+              testExecution.test_execution_id,
+              currentDocId
+            ).then(response => {
+              if (response.data.exists) {
+                setEvidenceStatusMap(prev => ({
+                  ...prev,
+                  [currentDocId]: {
+                    exists: true,
+                    status: response.data.data.status
+                  }
+                }));
+              }
+            }).catch(err => console.error('Error refreshing status:', err));
+          }
         }}
         documentData={selectedDocument}
         testExecution={testExecution}
+        rcmDetails={rcmDetails}
         existingTestResult={existingTestResult}
       />
     </Container>

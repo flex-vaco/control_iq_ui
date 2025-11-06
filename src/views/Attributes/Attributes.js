@@ -48,7 +48,9 @@ const Attributes = () => {
       // Store full data for edit operations
       setFullAttributesData(response.data);
       // Filter to only show the required columns in the order: client, name, description, test steps, control id
+      // Keep attribute_id in data for edit/delete operations (but won't be displayed)
       const filteredData = response.data.map(row => ({
+        attribute_id: row.attribute_id || null, // Keep id for edit/delete
         control_id: row.control_id || '',
         client_name: row.client_name || '',
         attribute_name: row.attribute_name || '',

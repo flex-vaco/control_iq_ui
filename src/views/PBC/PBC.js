@@ -46,7 +46,9 @@ const PBC = () => {
       // Store full data for edit/delete operations
       setFullData(response.data);
       // Filter to only show the required columns in order: client, name, status, control, documents count
+      // Keep evidence_id in data for edit/delete operations (but won't be displayed)
       const filteredData = response.data.map(item => ({
+        evidence_id: item.evidence_id || null, // Keep id for edit/delete
         control_id: item.control_id || '',
         client_name: item.client_name || '',
         evidence_name: item.evidence_name || '',

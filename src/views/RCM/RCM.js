@@ -64,7 +64,9 @@ const RCM = () => {
       // Store full data with all fields from API
       setFullData(response.data);
       // Create table data with view details button (only show selected columns in table)
+      // Keep rcm_id in data for edit/delete operations (but won't be displayed)
       const filteredData = response.data.map((item, index) => ({
+        rcm_id: item.rcm_id || null, // Keep id for edit/delete
         control_id: item.control_id || '',
         client_name: item.client_name || '',
         process : item.process || '',

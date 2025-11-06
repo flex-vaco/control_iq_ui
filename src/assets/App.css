@@ -1,7 +1,8 @@
 /* Color Palette Variables */
 :root {
   --primary-blue: #286070;
-  --dark-blue: #072942;
+  --dark-blue: #5a656d;
+  --very-dark-blue: #072942;
   --success-green: #10b981;
   --light-green: #ecfdf5;
   --teal: #475569;
