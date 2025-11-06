@@ -19,6 +19,7 @@ const TestExecutionDetails = () => {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [existingTestResult, setExistingTestResult] = useState(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [evidenceStatusMap, setEvidenceStatusMap] = useState({}); // Map of document_id to status info
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -31,8 +32,48 @@ const TestExecutionDetails = () => {
         const response = await getTestExecutionById(id);
         setTestExecution(response.data.test_execution);
         setRcmDetails(response.data.rcm_details);
-        setEvidenceDocuments(response.data.evidence_documents || []);
+        const evidenceDocs = response.data.evidence_documents || [];
+        setEvidenceDocuments(evidenceDocs);
         setTestAttributes(response.data.test_attributes || []);
+        
+        // Check status for each evidence document
+        if (response.data.test_execution && evidenceDocs.length > 0) {
+          const statusMap = {};
+          await Promise.all(
+            evidenceDocs.map(async (doc) => {
+              try {
+                const statusResponse = await checkTestExecutionEvidence(
+                  response.data.test_execution.test_execution_id,
+                  doc.document_id
+                );
+                if (statusResponse.data.exists) {
+                  const statusValue = statusResponse.data.data.status;
+                  // Status is stored as tinyint(1): 1 = Pass, 0 = Fail, NULL = not set
+                  // Debug: log the actual value to see what we're getting
+                  if (statusValue === null || statusValue === undefined) {
+                    console.log(`Warning: Document ${doc.document_id} has record but status is ${statusValue}`, statusResponse.data.data);
+                  }
+                  statusMap[doc.document_id] = {
+                    exists: true,
+                    status: statusValue // This will be 1, 0, or null
+                  };
+                } else {
+                  statusMap[doc.document_id] = {
+                    exists: false,
+                    status: null
+                  };
+                }
+              } catch (err) {
+                console.error(`Error checking status for document ${doc.document_id}:`, err);
+                statusMap[doc.document_id] = {
+                  exists: false,
+                  status: null
+                };
+              }
+            })
+          );
+          setEvidenceStatusMap(statusMap);
+        }
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch test execution details.');
         console.error(err);
@@ -76,6 +117,15 @@ const TestExecutionDetails = () => {
         // Record exists, set the existing result and open modal
         const existingData = response.data.data;
         setExistingTestResult(existingData);
+        
+        // Update status map
+        setEvidenceStatusMap(prev => ({
+          ...prev,
+          [doc.document_id]: {
+            exists: true,
+            status: existingData.status
+          }
+        }));
         
         // If result_artifact_url exists, use it instead of the original artifact_url
         if (existingData.result_artifact_url) {
@@ -139,6 +189,17 @@ const TestExecutionDetails = () => {
             }
           } else if (newRecordResponse.data.exists) {
             existingResultData = newRecordResponse.data.data;
+          }
+          
+          // Update status map
+          if (newRecordResponse.data.exists && newRecordResponse.data.data) {
+            setEvidenceStatusMap(prev => ({
+              ...prev,
+              [doc.document_id]: {
+                exists: true,
+                status: newRecordResponse.data.data.status
+              }
+            }));
           }
           
           setExistingTestResult(existingResultData);
@@ -304,36 +365,56 @@ const TestExecutionDetails = () => {
                       <tr>
                         <th>Name</th>
                         <th>Document Link</th>
+                        <th>Status</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {evidenceDocuments.map((doc) => (
-                        <tr key={doc.document_id}>
-                          <td>{doc.evidence_name || '-'}</td>
-                          <td>
-                            <a 
-                              href={getDocumentUrl(doc.artifact_url)} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary"
-                            >
-                              <i className="fas fa-external-link-alt me-2"></i>
-                              View Document
-                            </a>
-                          </td>
-                          <td>
-                            <Button 
-                              variant="outline-primary" 
-                              size="sm"
-                              onClick={() => handleMarkEvidenceFile(doc)}
-                              disabled={checkingExisting}
-                            >
-                              {checkingExisting ? 'Checking...' : 'Test & Mark'}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                      {evidenceDocuments.map((doc) => {
+                        const statusInfo = evidenceStatusMap[doc.document_id];
+                        const hasRecord = statusInfo?.exists || false;
+                        const status = statusInfo?.status;
+                        let statusDisplay = 'Pending Test';
+                        if (hasRecord) {
+                          if (status === 1 || status === true || status === '1' || status === 'true') {
+                            statusDisplay = 'Pass';
+                          } else if (status === 0 || status === false || status === '0' || status === 'false') {
+                            statusDisplay = 'Fail';
+                          } else {
+                            statusDisplay = 'Pending Test';
+                          }
+                        }
+                        
+                        return (
+                          <tr key={doc.document_id}>
+                            <td>{doc.evidence_name || '-'}</td>
+                            <td>
+                              <a 
+                                href={getDocumentUrl(doc.artifact_url)} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary"
+                              >
+                                <i className="fas fa-external-link-alt me-2"></i>
+                                View Document
+                              </a>
+                            </td>
+                            <td>
+                              {statusDisplay}
+                            </td>
+                            <td>
+                              <Button 
+                                variant="outline-primary" 
+                                size="sm"
+                                onClick={() => handleMarkEvidenceFile(doc)}
+                                disabled={checkingExisting}
+                              >
+                                {checkingExisting ? 'Checking...' : (hasRecord ? 'Mark' : 'Test & Mark')}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 ) : (
@@ -357,9 +438,26 @@ const TestExecutionDetails = () => {
       <MarkEvidenceFileModal
         show={showMarkEvidenceFileModal}
         onHide={() => {
+          const currentDocId = selectedDocument?.document_id;
           setShowMarkEvidenceFileModal(false);
           setSelectedDocument(null);
           setExistingTestResult(null);
+          if (currentDocId && testExecution) {
+            checkTestExecutionEvidence(
+              testExecution.test_execution_id,
+              currentDocId
+            ).then(response => {
+              if (response.data.exists) {
+                setEvidenceStatusMap(prev => ({
+                  ...prev,
+                  [currentDocId]: {
+                    exists: true,
+                    status: response.data.data.status
+                  }
+                }));
+              }
+            }).catch(err => console.error('Error refreshing status:', err));
+          }
         }}
         documentData={selectedDocument}
         testExecution={testExecution}

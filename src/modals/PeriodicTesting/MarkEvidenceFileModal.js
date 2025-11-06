@@ -646,7 +646,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                 </div>
                 
                 {expandedSections.evidenceDetails && documentData && (
-                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem', maxHeight: '50vh', overflowY: 'auto' }}>
                     {renderEvidenceDetails(documentData.evidence_ai_details)}
                   </div>
                 )}
