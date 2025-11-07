@@ -252,7 +252,8 @@ export const applyWorksheetFormatting = (ws, data) => {
         'Control Information', 'Mitigation', 'Test Information', 'Conclusion',
         'Contains Phase', 'Time Tracking', 'Test Steps and Attributes',
         'Deficiencies & Remediation', 'Interim I Testing', 'Population and Sample',
-        'PBC Request', 'Attribute Testing', 'Conclusions', 'Review Plan', 'Review Log'
+        'PBC Request', 'Attribute Testing', 'Conclusions', 'Review Plan', 'Review Log',
+        'Test of Design Testing', 'Test of Design', 'Footnotes'
       ].includes(firstCell);
 
       // Check if it's a subsection header (like "Control Details", "Mitigates", etc.)
@@ -307,15 +308,211 @@ export const applyWorksheetFormatting = (ws, data) => {
 };
 
 /**
- * Exports report data to Excel file with Overview and Interim sheets
+ * Prepares Test of Design data for Excel export with proper structure
  * @param {Object} rcmDetails - RCM details object
  * @param {Object} testExecution - Test execution object
  * @param {Array} testAttributes - Array of test attributes
  * @param {Array} evidenceDocuments - Array of evidence documents
+ * @param {Array} testExecutionEvidenceDocuments - Array of test execution evidence documents
+ * @returns {Array} Two-dimensional array representing the Excel data
  */
-export const exportReportToExcel = (rcmDetails, testExecution, testAttributes = [], evidenceDocuments = []) => {
-  // Prepare data for both sheets
+export const prepareTestOfDesignData = (rcmDetails, testExecution, testAttributes = [], evidenceDocuments = [], testExecutionEvidenceDocuments = []) => {
+  const data = [];
+
+  // Test of Design Testing Section
+  data.push(['', '']); // Empty row for spacing
+  data.push(['Test of Design Testing', '']); // Section header
+  data.push(['Heading', 'Details']); // Table header
+  data.push(['Has Status', testExecution?.status || 'N/A']);
+  data.push(['Period Covered Start Date', testExecution?.start_date || 'N/A']);
+  data.push(['Period Covered End Date', testExecution?.end_date || 'N/A']);
+  data.push(['Sample Size', testExecution?.sample_size || 'N/A']);
+  data.push(['Tested By', testExecution?.user_name || 'N/A']);
+  data.push(['Testing Start Date', testExecution?.testing_start_date || 'N/A']);
+  data.push(['Testing Due Date', testExecution?.testing_due_date || 'N/A']);
+  data.push(['Testing Completion Date', testExecution?.testing_completion_date || 'N/A']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Population and Sample Section
+  data.push(['Population and Sample', '']); // Section header
+  data.push(['Heading', 'Details']); // Table header
+  data.push(['Population Completeness Procedures', '']);
+  data.push(['Sample Selection Methodology', '']);
+  data.push(['Sample Special Considerations', '']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Test Steps and Attributes Section
+  data.push(['Test Steps and Attributes', '']); // Section header
+  data.push(['Order', 'Test Step', 'Test Step Description', 'Attribute Name', 'Attribute Description', 'Test']); // Table header
+  if (testAttributes && testAttributes.length > 0) {
+    testAttributes.forEach((attr, index) => {
+      data.push([
+        index + 1,
+        attr.test_steps || '',
+        attr.test_steps || '',
+        attr.attribute_name || '',
+        attr.attribute_description || '',
+        ''
+      ]);
+    });
+  } else {
+    data.push(['', '', '', '', '', '']);
+  }
+  data.push(['', '']); // Empty row for spacing
+
+  // PBC Request Section
+  data.push(['PBC Request', '']); // Section header
+  data.push(['Request ID', 'Request Type', 'Request Due', 'Request Status', 'Request Description', 'Request Provider']); // Table header
+  if (evidenceDocuments && evidenceDocuments.length > 0) {
+    evidenceDocuments.forEach((doc, index) => {
+      data.push([
+        doc.document_id || doc.evidence_id || `REQ-${index + 1}`,
+        rcmDetails?.control_id || testExecution?.control_id || '',
+        testExecution?.quarter && testExecution?.year 
+          ? `Q${testExecution.quarter} ${testExecution.year}` 
+          : '',
+        doc.testing_status || testExecution?.status || 'Pending',
+        doc.evidence_name || rcmDetails?.control_description || '',
+        testExecution?.client_name || ''
+      ]);
+    });
+  } else {
+    data.push(['', '', '', '', '', '']);
+  }
+  data.push(['', '']); // Empty row for spacing
+
+  // Attribute Testing Section
+  data.push(['Attribute Testing', '']); // Section header
+  data.push(['Test of Design', '']); // Subsection header
+  // Create header row with Application and attribute names
+  const attributeHeaders = ['Application'];
+  if (testAttributes && testAttributes.length > 0) {
+    testAttributes.forEach((attr) => {
+      attributeHeaders.push(attr.attribute_description || attr.attribute_name || '');
+    });
+  } else {
+    attributeHeaders.push('No Attributes');
+  }
+  data.push(attributeHeaders);
+  
+  // Add rows for each evidence document
+  if (testExecutionEvidenceDocuments && testExecutionEvidenceDocuments.length > 0) {
+    testExecutionEvidenceDocuments.forEach((record) => {
+      const row = [record.evidence_name || 'N/A'];
+      
+      // Get the parsed results
+      let results = null;
+      try {
+        if (record.result_parsed) {
+          results = record.result_parsed;
+        } else if (record.result) {
+          results = typeof record.result === 'string' ? JSON.parse(record.result) : record.result;
+        }
+      } catch (error) {
+        console.error('Error parsing result for record:', record, error);
+        results = null;
+      }
+      
+      const attributesResults = results?.attributes_results || [];
+      
+      // Create a map of attribute_name to test data for quick lookup
+      const attributeDataMap = {};
+      if (attributesResults && Array.isArray(attributesResults)) {
+        attributesResults.forEach(attrResult => {
+          if (attrResult.attribute_name) {
+            attributeDataMap[attrResult.attribute_name] = {
+              result: attrResult.result !== undefined ? (attrResult.result ? 'Pass' : 'Fail') : null,
+              explanation: attrResult.explanation || attrResult.reason || '',
+              details: attrResult.details || ''
+            };
+          }
+        });
+      }
+      
+      // Add values for each attribute
+      if (testAttributes && testAttributes.length > 0) {
+        testAttributes.forEach((attr) => {
+          const attrData = attributeDataMap[attr.attribute_name];
+          let displayValue = 'N/A';
+          if (attrData) {
+            if (attrData.explanation) {
+              displayValue = attrData.explanation;
+            } else if (attrData.details) {
+              displayValue = attrData.details;
+            } else if (attrData.result !== null) {
+              displayValue = attrData.result;
+            }
+          }
+          row.push(displayValue);
+        });
+      } else {
+        row.push('N/A');
+      }
+      
+      data.push(row);
+    });
+  } else {
+    const emptyRow = ['No test execution evidence documents found. Complete testing on evidence documents to see results here.'];
+    // Fill remaining columns
+    for (let i = 1; i < attributeHeaders.length; i++) {
+      emptyRow.push('');
+    }
+    data.push(emptyRow);
+  }
+  data.push(['', '']); // Empty row for spacing
+
+  // Test of Design Section
+  data.push(['Test of Design', '']); // Section header
+  data.push(['Tool', 'Minimum Length', 'Complexity Enabled']); // Table header
+  data.push(['', '', '']);
+  data.push(['', '', '']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Footnotes Section
+  data.push(['Footnotes', '']); // Section header
+  data.push(['Order', 'Description']); // Table header
+  data.push([1, 'The test of design was conducted using the following tools: Password Complexity and Minimum Password Length.']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Conclusion Section
+  data.push(['Conclusion', '']); // Section header
+  data.push(['Heading', 'Details']); // Table header
+  data.push(['Tester Notes', '']);
+  data.push(['Exceptions Noted', '']);
+  data.push(['Exceptions Are Random', '']);
+  data.push(['Conclusion', '']);
+  data.push(['Sample Expansion Methodology', '']);
+  data.push(['Control Effectiveness Conclusion For Phase', '']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Review Plan Section
+  data.push(['Review Plan', '']); // Section header
+  data.push(['Order', 'Assignee', 'Due Date', 'Review Type', 'Review Status']); // Table header
+  data.push(['', '', '', '', '']);
+  data.push(['', '', '', '', '']);
+  data.push(['', '']); // Empty row for spacing
+
+  // Review Log Section
+  data.push(['Review Log', '']); // Section header
+  data.push(['Review', '']); // Subsection header
+  data.push(['Assigned To', 'Review Type', 'Date Received', 'Date Completed', 'Review Notes']); // Table header
+  data.push(['', '', '', '', '']);
+
+  return data;
+};
+
+/**
+ * Exports report data to Excel file with Overview, Test of Design, and Interim sheets
+ * @param {Object} rcmDetails - RCM details object
+ * @param {Object} testExecution - Test execution object
+ * @param {Array} testAttributes - Array of test attributes
+ * @param {Array} evidenceDocuments - Array of evidence documents
+ * @param {Array} testExecutionEvidenceDocuments - Array of test execution evidence documents
+ */
+export const exportReportToExcel = (rcmDetails, testExecution, testAttributes = [], evidenceDocuments = [], testExecutionEvidenceDocuments = []) => {
+  // Prepare data for all sheets
   const overviewData = prepareOverviewData(rcmDetails, testExecution, testAttributes);
+  const testOfDesignData = prepareTestOfDesignData(rcmDetails, testExecution, testAttributes, evidenceDocuments, testExecutionEvidenceDocuments);
   const interimData = prepareInterimData(rcmDetails, testExecution, testAttributes, evidenceDocuments);
 
   // Create a new workbook
@@ -323,14 +520,17 @@ export const exportReportToExcel = (rcmDetails, testExecution, testAttributes = 
 
   // Convert data arrays to worksheets
   const overviewSheet = XLSX.utils.aoa_to_sheet(overviewData);
+  const testOfDesignSheet = XLSX.utils.aoa_to_sheet(testOfDesignData);
   const interimSheet = XLSX.utils.aoa_to_sheet(interimData);
 
-  // Apply formatting to both sheets
+  // Apply formatting to all sheets
   applyWorksheetFormatting(overviewSheet, overviewData);
+  applyWorksheetFormatting(testOfDesignSheet, testOfDesignData);
   applyWorksheetFormatting(interimSheet, interimData);
 
   // Add worksheets to workbook with sheet names
   XLSX.utils.book_append_sheet(workbook, overviewSheet, 'Overview');
+  XLSX.utils.book_append_sheet(workbook, testOfDesignSheet, 'Test of Design');
   XLSX.utils.book_append_sheet(workbook, interimSheet, 'Interim');
 
   // Generate filename with test execution info if available

@@ -477,7 +477,7 @@ const TestExecutionDetails = () => {
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5 className="mb-0">Test Execution Report</h5>
                   <Button variant="primary" onClick={() => setShowReportModal(true)}>
-                    Overview
+                    View Report
                   </Button>
                 </div>
                 {reportData.length > 0 ? (
