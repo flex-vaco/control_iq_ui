@@ -18,7 +18,9 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
   const [boxColor, setBoxColor] = useState("#ff0000");
   const [textColor, setTextColor] = useState("#ffffff");
   const [konvaImage, setKonvaImage] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [scale, setScale] = useState(1);
+  // eslint-disable-next-line no-unused-vars
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);

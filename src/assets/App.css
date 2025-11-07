@@ -718,6 +718,37 @@ h2 {
   overflow: hidden;
 }
 
+.modal-full-width {
+  width: 95vw !important;
+  max-width: 95vw !important;
+}
+
+.modal-full-width .modal-content {
+  width: 100%;
+}
+
+.table-borderless {
+  border: none !important;
+}
+
+.table-borderless th,
+.table-borderless td,
+.table-borderless tr {
+  border: none !important;
+}
+
+.table-40-width {
+  width: 40% !important;
+  max-width: 40% !important;
+  min-width: 40% !important;
+}
+
+.table-60-width {
+  width: 60% !important;
+  max-width: 60% !important;
+  min-width: 60% !important;
+}
+
 button.btn{
   border-radius: 50px !important;
 }
