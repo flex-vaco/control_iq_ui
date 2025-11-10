@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Button, Form, Alert, Spinner, Row, Col } from 'react-bootstrap';
+import { Modal, Button, Form, Alert, Spinner, Row, Col, ListGroup } from 'react-bootstrap';
 
 const PbcCreateModal = ({
   show,
@@ -15,7 +15,11 @@ const PbcCreateModal = ({
   clients,
   selectedClientId,
   onClientChange,
-  mode = 'create' // 'create' or 'edit'
+  mode = 'create', // 'create' or 'edit'
+  duplicateError,
+  checkingDuplicate,
+  existingDocuments = [],
+  loadingDocuments = false
 }) => {
   const testingStatuses = ['Pending', 'Partial Received', 'Received'];
   
@@ -37,6 +41,7 @@ const PbcCreateModal = ({
       <Form onSubmit={onSubmit}>
         <Modal.Body>
           {submissionStatus && <Alert variant={submissionStatus.variant}>{submissionStatus.message}</Alert>}
+          {duplicateError && <Alert variant="danger">{duplicateError}</Alert>}
           
           <Row className="mb-3">
             <Col md={12}>
@@ -48,7 +53,7 @@ const PbcCreateModal = ({
                   value={form.client_id || selectedClientId || ''}
                   onChange={onChange}
                   required
-                  disabled={loading}
+                  disabled={loading || mode === 'edit'}
                 >
                   <option value="" disabled>Choose a Client...</option>
                   {clients.map((client) => (
@@ -71,7 +76,7 @@ const PbcCreateModal = ({
                   value={form.control_id}
                   onChange={onChange}
                   required
-                  disabled={loading}
+                  disabled={loading || mode === 'edit'}
                 >
                   <option value="" disabled>Choose a Control ID...</option>
                   {rcmControls.map((control, index) => (
@@ -105,7 +110,7 @@ const PbcCreateModal = ({
                   value={form.year || ''}
                   onChange={onChange}
                   required
-                  disabled={loading}
+                  disabled={loading || mode === 'edit'}
                 >
                   <option value="" disabled>Select Year...</option>
                   {years.map(year => (
@@ -123,7 +128,7 @@ const PbcCreateModal = ({
                   value={form.quarter || ''}
                   onChange={onChange}
                   required
-                  disabled={loading}
+                  disabled={loading || mode === 'edit'}
                 >
                   <option value="" disabled>Select Quarter...</option>
                   {quarters.map(quarter => (
@@ -181,6 +186,42 @@ const PbcCreateModal = ({
             </Form.Text>
           </Form.Group>
 
+          {mode === 'edit' && (
+            <Form.Group className="mb-3">
+              <Form.Label>Existing Documents</Form.Label>
+              {loadingDocuments ? (
+                <div className="text-center py-2">
+                  <Spinner animation="border" size="sm" /> Loading documents...
+                </div>
+              ) : existingDocuments.length > 0 ? (
+                <ListGroup>
+                  {existingDocuments.map((doc, index) => {
+                    // Extract base URL (without /api) for serving static files
+                    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                    const baseUrl = apiUrl.replace('/api', '');
+                    const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
+                    const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
+                    return (
+                      <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
+                        <a 
+                          href={documentUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-decoration-none"
+                        >
+                          <i className="fas fa-file me-2"></i>
+                          {fileName}
+                        </a>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <Form.Text className="text-muted">No documents uploaded yet.</Form.Text>
+              )}
+            </Form.Group>
+          )}
+
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={onHide} disabled={loading}>
@@ -189,9 +230,9 @@ const PbcCreateModal = ({
           <Button 
             variant="success" 
             type="submit" 
-            disabled={loading || !form.control_id || !form.evidence_name || !form.testing_status || !form.year || !form.quarter}
+            disabled={loading || checkingDuplicate || duplicateError || !form.control_id || !form.evidence_name || !form.testing_status || !form.year || !form.quarter || !form.client_id}
           >
-            {loading ? <><Spinner as="span" animation="border" size="sm" /> Saving...</> : 'Save Request'}
+            {loading ? <><Spinner as="span" animation="border" size="sm" /> Saving...</> : checkingDuplicate ? <><Spinner as="span" animation="border" size="sm" /> Checking...</> : 'Save Request'}
           </Button>
         </Modal.Footer>
       </Form>
