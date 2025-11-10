@@ -43,6 +43,18 @@ export const getRcmControls = (clientId) => {
   return api.get('/data/rcm-controls', { params: { client_id: clientId } });
 };
 
+export const checkDuplicatePbc = (controlId, year, quarter, clientId, evidenceId = null) => {
+  const params = { control_id: controlId, year, quarter, client_id: clientId };
+  if (evidenceId) {
+    params.evidence_id = evidenceId;
+  }
+  return api.get('/data/pbc/check-duplicate', { params });
+};
+
+export const getEvidenceDocuments = (evidenceId) => {
+  return api.get(`/data/pbc/${evidenceId}/documents`);
+};
+
 export const createPbcRequest = (formData) => {
   return api.post('/data/pbc', formData, {
     headers: {

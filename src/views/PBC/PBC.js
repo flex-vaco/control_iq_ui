@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Alert, Spinner } from 'react-bootstrap';
 import DynamicTable from '../../components/DynamicTable';
-import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api } from '../../services/api';
+import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
 
 const PBC = () => {
@@ -27,6 +27,10 @@ const PBC = () => {
   });
   const [currentDescription, setCurrentDescription] = useState('');
   const [submissionStatus, setSubmissionStatus] = useState(null);
+  const [duplicateError, setDuplicateError] = useState(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const [existingDocuments, setExistingDocuments] = useState([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
 
   // --- Data Fetching ---
   const fetchClients = async () => {
@@ -67,12 +71,14 @@ const PBC = () => {
   };
 
   const fetchRcmControls = async (clientId) => {
-    if (!clientId) return;
+    if (!clientId) return null;
     try {
       const response = await getRcmControls(clientId);
       setRcmControls(response.data);
+      return response.data;
     } catch (err) {
       console.error('Failed to fetch RCM controls:', err);
+      return null;
     }
   };
 
@@ -83,7 +89,7 @@ const PBC = () => {
 
   // --- Form Handlers ---
 
-  const handleModalOpen = (mode = 'create', pbcItem = null) => {
+  const handleModalOpen = async (mode = 'create', pbcItem = null) => {
     if (mode === 'edit' && pbcItem) {
       setSelectedPbc(pbcItem);
       // Find full item from fullData to get all fields
@@ -98,9 +104,33 @@ const PBC = () => {
         documents: null,
       });
       if (fullItem?.client_id || pbcItem.client_id) {
-        fetchRcmControls(fullItem?.client_id || pbcItem.client_id);
+        const clientId = fullItem?.client_id || pbcItem.client_id;
+        const controlsData = await fetchRcmControls(clientId);
+        // Set the control description for the selected control_id
+        const selectedControlId = fullItem?.control_id || pbcItem.control_id;
+        if (selectedControlId && controlsData) {
+          const selectedControl = controlsData.find(c => c.control_id === selectedControlId);
+          if (selectedControl) {
+            setCurrentDescription(selectedControl.control_description || '');
+          }
+        }
       }
       setModalMode('edit');
+      
+      // Fetch existing documents
+      const evidenceId = pbcItem.evidence_id;
+      if (evidenceId) {
+        setLoadingDocuments(true);
+        try {
+          const response = await getEvidenceDocuments(evidenceId);
+          setExistingDocuments(response.data || []);
+        } catch (err) {
+          console.error('Failed to fetch evidence documents:', err);
+          setExistingDocuments([]);
+        } finally {
+          setLoadingDocuments(false);
+        }
+      }
     } else {
       setSelectedPbc(null);
       setForm({
@@ -114,9 +144,11 @@ const PBC = () => {
       });
       setRcmControls([]);
       setModalMode('create');
+      setExistingDocuments([]);
+      setCurrentDescription('');
     }
-    setCurrentDescription('');
     setSubmissionStatus(null);
+    setDuplicateError(null);
     setShowModal(true);
   };
 
@@ -131,14 +163,64 @@ const PBC = () => {
       } else {
         setRcmControls([]);
       }
+      // Reset duplicate error when client changes
+      setDuplicateError(null);
     }
 
     if (name === 'control_id') {
       // Find and display the corresponding control description
       const selectedControl = rcmControls.find(c => c.control_id === value);
       setCurrentDescription(selectedControl ? selectedControl.control_description : '');
+      // Reset duplicate error when control changes
+      setDuplicateError(null);
+    }
+
+    // Reset duplicate error when year or quarter changes
+    if (name === 'year' || name === 'quarter') {
+      setDuplicateError(null);
     }
   };
+
+  // Check for duplicate when all three fields (control_id, year, quarter) are filled
+  useEffect(() => {
+    const checkDuplicate = async () => {
+      // Only check if all three fields are filled and we have a client_id
+      if (form.control_id && form.year && form.quarter && form.client_id) {
+        setCheckingDuplicate(true);
+        try {
+          const response = await checkDuplicatePbc(
+            form.control_id,
+            form.year,
+            form.quarter,
+            form.client_id,
+            modalMode === 'edit' && selectedPbc ? selectedPbc.evidence_id : null
+          );
+          
+          if (response.data.exists) {
+            setDuplicateError(response.data.message);
+          } else {
+            setDuplicateError(null);
+          }
+        } catch (err) {
+          console.error('Error checking duplicate:', err);
+          // Don't set error on API failure, just log it
+          setDuplicateError(null);
+        } finally {
+          setCheckingDuplicate(false);
+        }
+      } else {
+        // Clear duplicate error if not all fields are filled
+        setDuplicateError(null);
+      }
+    };
+
+    // Debounce the check to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      checkDuplicate();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.control_id, form.year, form.quarter, form.client_id, modalMode, selectedPbc]);
 
   const handleFileChange = (e) => {
     // Stores the FileList object
@@ -168,6 +250,12 @@ const PBC = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent submission if duplicate exists
+    if (duplicateError) {
+      return;
+    }
+    
     setLoading(true);
     setSubmissionStatus(null);
     setError('');
@@ -179,7 +267,6 @@ const PBC = () => {
     formData.append('testing_status', form.testing_status);
     formData.append('year', form.year);
     formData.append('quarter', form.quarter);
-
     // Append multiple files
     if (form.documents) {
       for (let i = 0; i < form.documents.length; i++) {
@@ -199,6 +286,17 @@ const PBC = () => {
           }
         });
         setSubmissionStatus({ message: 'PBC evidence updated successfully.', variant: 'success' });
+        
+        // Refresh existing documents after update
+        const evidenceId = selectedPbc.evidence_id;
+        if (evidenceId) {
+          try {
+            const docResponse = await getEvidenceDocuments(evidenceId);
+            setExistingDocuments(docResponse.data || []);
+          } catch (err) {
+            console.error('Failed to refresh evidence documents:', err);
+          }
+        }
       } else {
         // Create new PBC
         response = await createPbcRequest(formData);
@@ -285,6 +383,10 @@ const PBC = () => {
         selectedClientId={form.client_id}
         onClientChange={() => {}}
         mode={modalMode}
+        duplicateError={duplicateError}
+        checkingDuplicate={checkingDuplicate}
+        existingDocuments={existingDocuments}
+        loadingDocuments={loadingDocuments}
       />
     </div>
   );
