@@ -3,7 +3,7 @@ import { Button, Alert, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
-import { getClients, getRcmData, getTestExecutions, createTestExecution } from '../../services/api';
+import { getClients, getRcmData, getTestExecutions, createTestExecution, checkDuplicateTestExecution } from '../../services/api';
 import PeriodicTestingModal from '../../modals/PeriodicTesting/PeriodicTestingModal';
 
 const PeriodicTesting = () => {
@@ -13,6 +13,8 @@ const PeriodicTesting = () => {
   const [rcmData, setRcmData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [duplicateError, setDuplicateError] = useState(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -103,10 +105,17 @@ const PeriodicTesting = () => {
       control_id: '',
     });
     setRcmData([]); // Reset RCM data when opening modal
+    setDuplicateError(null);
+    setError('');
     setShowModal(true);
   };
 
   const handleSave = async (formData, onSuccess) => {
+    // Prevent submission if duplicate exists
+    if (duplicateError) {
+      return;
+    }
+    
     setLoading(true);
     setError('');
     try {
@@ -160,6 +169,8 @@ const PeriodicTesting = () => {
         process: '',
         control_id: ''
       }));
+      // Reset duplicate error when client changes
+      setDuplicateError(null);
     } else {
       setForm(prev => {
         // Reset control_id when process changes
@@ -168,8 +179,53 @@ const PeriodicTesting = () => {
         }
         return { ...prev, [name]: value };
       });
+      // Reset duplicate error when control, year, or quarter changes
+      if (name === 'control_id' || name === 'year' || name === 'quarter') {
+        setDuplicateError(null);
+      }
     }
   };
+
+  // Check for duplicate when all three fields (control_id, year, quarter) are filled
+  useEffect(() => {
+    const checkDuplicate = async () => {
+      // Only check if all three fields are filled and we have a client_id
+      if (form.control_id && form.year && form.quarter && form.client_id) {
+        setCheckingDuplicate(true);
+        try {
+          const response = await checkDuplicateTestExecution(
+            form.control_id,
+            form.year,
+            form.quarter,
+            form.client_id,
+            null // No test_execution_id for new creation
+          );
+          
+          if (response.data.exists) {
+            setDuplicateError(response.data.message);
+          } else {
+            setDuplicateError(null);
+          }
+        } catch (err) {
+          console.error('Error checking duplicate:', err);
+          // Don't set error on API failure, just log it
+          setDuplicateError(null);
+        } finally {
+          setCheckingDuplicate(false);
+        }
+      } else {
+        // Clear duplicate error if not all fields are filled
+        setDuplicateError(null);
+      }
+    };
+
+    // Debounce the check to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      checkDuplicate();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.control_id, form.year, form.quarter, form.client_id]);
 
   // --- Component Render ---
   return (
@@ -218,6 +274,7 @@ const PeriodicTesting = () => {
         onHide={() => {
           setShowModal(false);
           setError('');
+          setDuplicateError(null);
         }}
         form={form}
         onChange={handleChange}
@@ -227,6 +284,8 @@ const PeriodicTesting = () => {
         controlIds={getControlIdsByProcess(form.process)}
         loading={loading}
         onRemarksSaved={fetchTestingData}
+        duplicateError={duplicateError}
+        checkingDuplicate={checkingDuplicate}
       />
     </div>
   );

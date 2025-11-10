@@ -93,6 +93,11 @@ export const createTestExecution = (data) => {
   return api.post('/data/test-executions', data);
 };
 
+export const checkDuplicateTestExecution = (controlId, year, quarter, clientId) => {
+  const params = { control_id: controlId, year, quarter, client_id: clientId };
+  return api.get('/data/test-executions/check-duplicate', { params });
+};
+
 export const getTestExecutions = () => {
   return api.get('/data/test-executions');
 };

@@ -14,7 +14,9 @@ const PeriodicTestingModal = ({
   uniqueProcesses,
   controlIds,
   loading,
-  onRemarksSaved
+  onRemarksSaved,
+  duplicateError,
+  checkingDuplicate
 }) => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -48,6 +50,11 @@ const PeriodicTestingModal = ({
   // Handle form submission - Save directly
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent submission if duplicate exists
+    if (duplicateError) {
+      return;
+    }
     
     // Validate form
     if (!form.client_id || !form.year || !form.quarter || !form.process || !form.control_id) {
@@ -170,6 +177,7 @@ const PeriodicTestingModal = ({
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
           {error && <Alert variant="danger">{error}</Alert>}
+          {duplicateError && <Alert variant="danger">{duplicateError}</Alert>}
           <Row className="mb-3">
             <Col md={12}>
               <Form.Group controlId="clientSelect">
@@ -290,9 +298,9 @@ const PeriodicTestingModal = ({
           <Button 
             variant="primary" 
             type="submit"
-            disabled={!isFormValid || saving}
+            disabled={!isFormValid || saving || checkingDuplicate || duplicateError}
           >
-            {saving ? 'Saving...' : 'Process Testing'}
+            {saving ? 'Saving...' : checkingDuplicate ? 'Checking...' : 'Process Testing'}
           </Button>
         </Modal.Footer>
       </Form>
