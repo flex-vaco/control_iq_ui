@@ -237,7 +237,7 @@ const PeriodicTesting = () => {
           onClick={handleModalOpen}
           id="add-testing-button"
         >
-          <i class="fas fa-plus"></i> Add Testing
+          <i className="fas fa-plus"></i> Add Testing
         </Button>
       </div>
       
