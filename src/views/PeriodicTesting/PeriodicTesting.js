@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
@@ -12,7 +12,6 @@ const PeriodicTesting = () => {
   const [clients, setClients] = useState([]);
   const [rcmData, setRcmData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [duplicateError, setDuplicateError] = useState(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   
@@ -48,7 +47,6 @@ const PeriodicTesting = () => {
 
   const fetchTestingData = async () => {
     setLoading(true);
-    setError('');
     try {
       // Fetch test executions without filtering by client initially
       const response = await getTestExecutions();
@@ -65,7 +63,12 @@ const PeriodicTesting = () => {
       }));
       setTestingData(filteredData || []);
     } catch (err) {
-      setError('Failed to fetch test executions.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch test executions.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -106,7 +109,6 @@ const PeriodicTesting = () => {
     });
     setRcmData([]); // Reset RCM data when opening modal
     setDuplicateError(null);
-    setError('');
     setShowModal(true);
   };
 
@@ -117,7 +119,6 @@ const PeriodicTesting = () => {
     }
     
     setLoading(true);
-    setError('');
     try {
       const response = await createTestExecution({
         control_id: formData.control_id,
@@ -147,8 +148,13 @@ const PeriodicTesting = () => {
           confirmButtonColor: '#286070'
         });
       } else {
-        // For other errors, show in error state
-        setError(errorMessage);
+        // For other errors, show SweetAlert
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: errorMessage,
+          confirmButtonColor: '#286070'
+        });
       }
       console.error(err);
     } finally {
@@ -203,6 +209,13 @@ const PeriodicTesting = () => {
           
           if (response.data.exists) {
             setDuplicateError(response.data.message);
+            // Also show SweetAlert for duplicate error
+            Swal.fire({
+              icon: 'warning',
+              title: 'Duplicate Found',
+              text: response.data.message,
+              confirmButtonColor: '#286070'
+            });
           } else {
             setDuplicateError(null);
           }
@@ -241,8 +254,6 @@ const PeriodicTesting = () => {
         </Button>
       </div>
       
-      {error && <Alert variant="danger">{error}</Alert>}
-      
       {loading && testingData.length === 0 ? (
         <Spinner animation="border" />
       ) : (
@@ -273,7 +284,6 @@ const PeriodicTesting = () => {
         show={showModal}
         onHide={() => {
           setShowModal(false);
-          setError('');
           setDuplicateError(null);
         }}
         form={form}

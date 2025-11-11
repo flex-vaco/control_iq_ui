@@ -5,6 +5,7 @@ import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvide
 import { api } from '../../services/api';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
 import ReportModal from '../../modals/PeriodicTesting/ReportModal';
+import AddEvidenceDocumentsModal from '../../modals/PeriodicTesting/AddEvidenceDocumentsModal';
 
 const TestExecutionDetails = () => {
   const { id } = useParams();
@@ -15,6 +16,7 @@ const TestExecutionDetails = () => {
   const [testExecution, setTestExecution] = useState(null);
   const [rcmDetails, setRcmDetails] = useState(null);
   const [evidenceDocuments, setEvidenceDocuments] = useState([]);
+  const [evidenceDetails, setEvidenceDetails] = useState(null);
   const [testAttributes, setTestAttributes] = useState([]);
   const [showMarkEvidenceFileModal, setShowMarkEvidenceFileModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -25,6 +27,7 @@ const TestExecutionDetails = () => {
   const [evidenceStatusMap, setEvidenceStatusMap] = useState({}); // Map of document_id to status info
   const [reportData, setReportData] = useState([]); // Data for Report tab
   const [showReportModal, setShowReportModal] = useState(false); // State for Report modal
+  const [showAddEvidenceModal, setShowAddEvidenceModal] = useState(false); // State for Add Evidence Documents modal
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -40,7 +43,7 @@ const TestExecutionDetails = () => {
         const evidenceDocs = response.data.evidence_documents || [];
         setEvidenceDocuments(evidenceDocs);
         setTestAttributes(response.data.test_attributes || []);
-        
+        setEvidenceDetails(response.data.evidence_details || null);
         // Check status for each evidence document
         if (response.data.test_execution && evidenceDocs.length > 0) {
           const statusMap = {};
@@ -390,12 +393,22 @@ const TestExecutionDetails = () => {
             {/* Evidences Tab */}
             <Tab eventKey="evidences" title="Evidences">
               <div className="mt-3">
-                <h5>Evidence Documents</h5>
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h5 className="mb-0">{evidenceDetails.evidence_name} - Evidence Documents</h5>
+                  <Button 
+                    variant="primary" 
+                    size="sm"
+                    onClick={() => setShowAddEvidenceModal(true)}
+                  >
+                    <i className="fas fa-plus me-2"></i>
+                    Add Evidences
+                  </Button>
+                </div>
                 {evidenceDocuments.length > 0 ? (
                   <Table striped bordered hover responsive>
                     <thead>
                       <tr>
-                        <th>Name</th>
+                        <th>Document Name</th>
                         <th>Document Link</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -419,7 +432,7 @@ const TestExecutionDetails = () => {
                         
                         return (
                           <tr key={doc.document_id}>
-                            <td>{doc.evidence_name || '-'}</td>
+                            <td>{doc.document_name || '-'}</td>
                             <td>
                               <a 
                                 href={getDocumentUrl(doc.artifact_url)} 
@@ -570,6 +583,58 @@ const TestExecutionDetails = () => {
         rcmDetails={rcmDetails}
         testAttributes={testAttributes}
         evidenceDocuments={evidenceDocuments}
+      />
+
+      <AddEvidenceDocumentsModal
+        show={showAddEvidenceModal}
+        onHide={() => setShowAddEvidenceModal(false)}
+        evidenceId={evidenceDetails?.evidence_id}
+        onSuccess={async () => {
+          // Refresh evidence documents after successful upload
+          try {
+            const response = await getTestExecutionById(id);
+            const evidenceDocs = response.data.evidence_documents || [];
+            setEvidenceDocuments(evidenceDocs);
+            
+            // Refresh status map for new documents
+            if (response.data.test_execution && evidenceDocs.length > 0) {
+              const statusMap = { ...evidenceStatusMap };
+              await Promise.all(
+                evidenceDocs.map(async (doc) => {
+                  // Only check if not already in status map
+                  if (!statusMap[doc.document_id]) {
+                    try {
+                      const statusResponse = await checkTestExecutionEvidence(
+                        response.data.test_execution.test_execution_id,
+                        doc.document_id
+                      );
+                      if (statusResponse.data.exists) {
+                        statusMap[doc.document_id] = {
+                          exists: true,
+                          status: statusResponse.data.data.status
+                        };
+                      } else {
+                        statusMap[doc.document_id] = {
+                          exists: false,
+                          status: null
+                        };
+                      }
+                    } catch (err) {
+                      console.error(`Error checking status for document ${doc.document_id}:`, err);
+                      statusMap[doc.document_id] = {
+                        exists: false,
+                        status: null
+                      };
+                    }
+                  }
+                })
+              );
+              setEvidenceStatusMap(statusMap);
+            }
+          } catch (err) {
+            console.error('Error refreshing evidence documents:', err);
+          }
+        }}
       />
     </Container>
   );
