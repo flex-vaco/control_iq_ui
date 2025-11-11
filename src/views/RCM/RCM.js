@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import DynamicTable from '../../components/DynamicTable';
 import { getRcmData, api, getClientsForDropdown } from '../../services/api';
@@ -10,7 +11,6 @@ import RcmCreateModal from '../../modals/RCM/RcmCreateModal';
 const RCM = () => {
   const [fullData, setFullData] = useState([]); // Store full RCM data
   const [data, setData] = useState([]); // Table display data
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -38,7 +38,6 @@ const RCM = () => {
     key_reports: '',
     it_systems: ''
   });
-  const [rcmSubmissionStatus, setRcmSubmissionStatus] = useState(null);
   const [file, setFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [parsedData, setParsedData] = useState([]);
@@ -58,7 +57,6 @@ const RCM = () => {
 
   const fetchData = async (clientId = null) => {
     setLoading(true);
-    setError('');
     try {
       const response = await getRcmData(clientId);
       // Store full data with all fields from API
@@ -79,7 +77,12 @@ const RCM = () => {
       }));
       setData(filteredData);
     } catch (err) {
-      setError('Failed to fetch RCM data. Your session may have expired.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch RCM data. Your session may have expired.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -298,9 +301,11 @@ const RCM = () => {
 
           setParsedData(displayData);
           setShowPreviewTable(true);
-          setUploadStatus({ 
-            message: `File parsed successfully. ${displayData.length} records loaded. Review and edit the data before submitting.`, 
-            variant: 'success' 
+          Swal.fire({
+            icon: 'success',
+            title: 'File Parsed Successfully',
+            text: `${displayData.length} records loaded. Review and edit the data before submitting.`,
+            confirmButtonColor: '#286070'
           });
           setParseLoading(false);
         } catch (parseError) {
@@ -379,7 +384,6 @@ const RCM = () => {
       });
       setSelectedRcm(rcmData);
       setModalMode('edit');
-      setRcmSubmissionStatus(null);
       setShowCreateModal(true);
     }
   };
@@ -392,31 +396,33 @@ const RCM = () => {
   const handleRcmSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setRcmSubmissionStatus(null);
-    setError('');
 
     try {
       if (modalMode === 'edit' && selectedRcm) {
         await api.put(`/data/rcm/${selectedRcm.rcm_id}`, rcmForm);
-        setRcmSubmissionStatus({ message: 'RCM record updated successfully.', variant: 'success' });
       } else {
         // Create new - need to use bulk save endpoint with single record
         await api.post('/data/rcm/save', {
           data: [rcmForm],
           client_id: rcmForm.client_id
         });
-        setRcmSubmissionStatus({ message: 'RCM record created successfully.', variant: 'success' });
       }
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: modalMode === 'edit' ? 'RCM record updated successfully.' : 'RCM record created successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchData();
-      setTimeout(() => {
-        setShowCreateModal(false);
-      }, 1000);
+      setShowCreateModal(false);
     } catch (err) {
       console.error('RCM Submission Error:', err.response || err);
       const errorMessage = err.response?.data?.message || 'Failed to save RCM record.';
-      setRcmSubmissionStatus({ 
-        message: errorMessage, 
-        variant: 'danger' 
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMessage,
+        confirmButtonColor: '#286070'
       });
     } finally {
       setLoading(false);
@@ -424,18 +430,38 @@ const RCM = () => {
   };
 
   const handleDeleteRcm = async (rcmId) => {
-    if (!window.confirm('Are you sure you want to delete this RCM record?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this RCM record?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
     setLoading(true);
-    setError('');
     try {
       await api.delete(`/data/rcm/${rcmId}`);
-      setError('');
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'RCM record has been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchData(); // Refresh the table
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete RCM record.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete RCM record.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -481,9 +507,11 @@ const RCM = () => {
         client_id: selectedClientId
       });
       
-      setUploadStatus({ 
-        message: `Save Successful: ${response.data.inserted} records saved.`, 
-        variant: 'success' 
+      await Swal.fire({
+        icon: 'success',
+        title: 'Save Successful',
+        text: `${response.data.inserted} records saved.`,
+        confirmButtonColor: '#286070'
       });
       
       // Refresh the RCM table data (fetch all data)
@@ -540,7 +568,6 @@ const RCM = () => {
                 key_reports: '',
                 it_systems: ''
               });
-              setRcmSubmissionStatus(null);
               setModalMode('create');
             }}
             id="add-rcm-button"
@@ -564,7 +591,6 @@ const RCM = () => {
         </div>
       </div>
       
-      {error && <Alert variant="danger">{error}</Alert>}
       
       {loading && data.length === 0 ? (
         <Spinner animation="border" />
@@ -607,7 +633,6 @@ const RCM = () => {
         onChange={handleRcmFormChange}
         onSubmit={handleRcmSubmit}
         loading={loading}
-        submissionStatus={rcmSubmissionStatus}
         clients={clients}
         mode={modalMode}
       />

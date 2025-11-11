@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import DynamicTable from '../../components/DynamicTable';
 import { getAttributesData, api, getClientsForDropdown } from '../../services/api';
@@ -8,7 +9,6 @@ import AttributesCreateModal from '../../modals/Attributes/AttributesCreateModal
 
 const Attributes = () => {
   const [data, setData] = useState([]);
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [file, setFile] = useState(null);
@@ -27,7 +27,6 @@ const Attributes = () => {
     attribute_description: '',
     test_steps: ''
   });
-  const [attributeSubmissionStatus, setAttributeSubmissionStatus] = useState(null);
   const [fullAttributesData, setFullAttributesData] = useState([]);
   const [selectedAttribute, setSelectedAttribute] = useState(null);
 
@@ -42,7 +41,6 @@ const Attributes = () => {
 
   const fetchData = async (clientId = null) => {
     setLoading(true);
-    setError('');
     try {
       const response = await getAttributesData(clientId);
       // Store full data for edit operations
@@ -59,7 +57,12 @@ const Attributes = () => {
       }));
       setData(filteredData);
     } catch (err) {
-      setError('Failed to fetch Attributes data. Your session may have expired.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch Attributes data. Your session may have expired.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -243,9 +246,11 @@ const Attributes = () => {
 
           setParsedData(displayData);
           setShowPreviewTable(true);
-          setUploadStatus({ 
-            message: `File parsed successfully. ${displayData.length} records loaded. Review and edit the data before submitting.`, 
-            variant: 'success' 
+          Swal.fire({
+            icon: 'success',
+            title: 'File Parsed Successfully',
+            text: `${displayData.length} records loaded. Review and edit the data before submitting.`,
+            confirmButtonColor: '#286070'
           });
           setParseLoading(false);
         } catch (parseError) {
@@ -317,9 +322,11 @@ const Attributes = () => {
         client_id: selectedClientId
       });
       
-      setUploadStatus({ 
-        message: `Save Successful: ${response.data.inserted} records saved.`, 
-        variant: 'success' 
+      await Swal.fire({
+        icon: 'success',
+        title: 'Save Successful',
+        text: `${response.data.inserted} records saved.`,
+        confirmButtonColor: '#286070'
       });
       
       // Refresh the Attributes table data (fetch all data)
@@ -358,7 +365,6 @@ const Attributes = () => {
         test_steps: attributeData.test_steps || ''
       });
       setModalMode('edit');
-      setAttributeSubmissionStatus(null);
       setShowCreateModal(true);
     }
   };
@@ -371,8 +377,6 @@ const Attributes = () => {
   const handleAttributeSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setAttributeSubmissionStatus(null);
-    setError('');
 
     try {
       if (modalMode === 'edit' && selectedAttribute) {
@@ -382,7 +386,6 @@ const Attributes = () => {
           attribute_description: attributeForm.attribute_description,
           test_steps: attributeForm.test_steps
         });
-        setAttributeSubmissionStatus({ message: 'Attribute updated successfully.', variant: 'success' });
       } else {
         // Create new - need to get rcm_id from control_id
         await api.post('/data/attributes/save', {
@@ -394,18 +397,23 @@ const Attributes = () => {
           }],
           client_id: attributeForm.client_id
         });
-        setAttributeSubmissionStatus({ message: 'Attribute created successfully.', variant: 'success' });
       }
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: modalMode === 'edit' ? 'Attribute updated successfully.' : 'Attribute created successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchData();
-      setTimeout(() => {
-        setShowCreateModal(false);
-      }, 1000);
+      setShowCreateModal(false);
     } catch (err) {
       console.error('Attribute Submission Error:', err.response || err);
       const errorMessage = err.response?.data?.message || 'Failed to save attribute.';
-      setAttributeSubmissionStatus({ 
-        message: errorMessage, 
-        variant: 'danger' 
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMessage,
+        confirmButtonColor: '#286070'
       });
     } finally {
       setLoading(false);
@@ -413,18 +421,38 @@ const Attributes = () => {
   };
 
   const handleDeleteAttribute = async (attributeId) => {
-    if (!window.confirm('Are you sure you want to delete this attribute?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this attribute?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
     setLoading(true);
-    setError('');
     try {
       await api.delete(`/data/attributes/${attributeId}`);
-      setError('');
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Attribute has been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchData(); // Refresh the table
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete attribute.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete attribute.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -448,7 +476,6 @@ const Attributes = () => {
                 attribute_description: '',
                 test_steps: ''
               });
-              setAttributeSubmissionStatus(null);
               setModalMode('create');
             }}
             id="add-attributes-button"
@@ -472,7 +499,6 @@ const Attributes = () => {
         </div>
       </div>
       
-      {error && <Alert variant="danger">{error}</Alert>}
       
       {loading && data.length === 0 ? (
         <Spinner animation="border" />
@@ -509,7 +535,6 @@ const Attributes = () => {
         onChange={handleAttributeFormChange}
         onSubmit={handleAttributeSubmit}
         loading={loading}
-        submissionStatus={attributeSubmissionStatus}
         clients={clients}
         mode={modalMode}
       />

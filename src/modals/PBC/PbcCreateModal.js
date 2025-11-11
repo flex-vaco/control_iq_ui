@@ -11,7 +11,6 @@ const PbcCreateModal = ({
   rcmControls,
   currentDescription,
   loading,
-  submissionStatus,
   clients,
   selectedClientId,
   onClientChange,
@@ -40,9 +39,6 @@ const PbcCreateModal = ({
       </Modal.Header>
       <Form onSubmit={onSubmit}>
         <Modal.Body>
-          {submissionStatus && <Alert variant={submissionStatus.variant}>{submissionStatus.message}</Alert>}
-          {duplicateError && <Alert variant="danger">{duplicateError}</Alert>}
-          
           <Row className="mb-3">
             <Col md={12}>
               <Form.Group controlId="clientSelect">
@@ -210,7 +206,7 @@ const PbcCreateModal = ({
                           className="text-decoration-none"
                         >
                           <i className="fas fa-file me-2"></i>
-                          {fileName}
+                          {doc.document_name || fileName}
                         </a>
                       </ListGroup.Item>
                     );
@@ -220,6 +216,11 @@ const PbcCreateModal = ({
                 <Form.Text className="text-muted">No documents uploaded yet.</Form.Text>
               )}
             </Form.Group>
+          )}
+
+          {/* Duplicate error message at bottom above button */}
+          {duplicateError && (
+            <Alert variant="danger" className="mt-3 mb-0">{duplicateError}</Alert>
           )}
 
         </Modal.Body>

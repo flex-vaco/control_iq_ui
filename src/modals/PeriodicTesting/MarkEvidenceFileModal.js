@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button, Row, Col } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
 import { api } from '../../services/api';
 
@@ -386,7 +387,12 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
 
   const handleSave = async () => {
     if (!stageRef.current || !testExecution || !documentData || !konvaImage) {
-      alert('Unable to save: Missing required data.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Unable to save: Missing required data.',
+        confirmButtonColor: '#286070'
+      });
       return;
     }
 
@@ -407,7 +413,12 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       }
       
       if (!controlId || controlId === '' || controlId === 'undefined') {
-        alert('Unable to save: Control ID not found. Please check the test execution data.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Unable to save: Control ID not found. Please check the test execution data.',
+          confirmButtonColor: '#286070'
+        });
         console.error('Control ID missing. testExecution:', testExecution, 'rcmDetails:', rcmDetails);
         setLoading(false);
         return;
@@ -521,11 +532,21 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
 
       initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
 
-      alert('Image saved successfully!');
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'Image saved successfully!',
+        confirmButtonColor: '#286070'
+      });
       onHide();
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(error.response?.data?.message || 'Failed to save image. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to save image. Please try again.',
+        confirmButtonColor: '#286070'
+      });
     } finally {
       setLoading(false);
     }

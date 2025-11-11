@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Button, Form, Alert, Spinner, Row, Col } from 'react-bootstrap';
+import { Modal, Button, Form, Spinner, Row, Col } from 'react-bootstrap';
 
 const ClientModal = ({
   show,
@@ -8,7 +8,6 @@ const ClientModal = ({
   onChange,
   onSubmit,
   loading,
-  submissionStatus,
   mode = 'create' // 'create' or 'edit'
 }) => {
   const statuses = ['active', 'inactive'];
@@ -20,8 +19,6 @@ const ClientModal = ({
       </Modal.Header>
       <Form onSubmit={onSubmit}>
         <Modal.Body>
-          {submissionStatus && <Alert variant={submissionStatus.variant}>{submissionStatus.message}</Alert>}
-          
           <Row className="mb-3">
             <Col md={12}>
               <Form.Group controlId="clientNameInput">

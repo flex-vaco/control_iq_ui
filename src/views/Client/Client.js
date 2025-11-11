@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
 import { getClients, createClient, updateClient, deleteClient } from '../../services/api';
 import ClientModal from '../../modals/Client/ClientModal';
@@ -7,7 +8,6 @@ import ClientModal from '../../modals/Client/ClientModal';
 const Client = () => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -22,12 +22,10 @@ const Client = () => {
     contact_phone: '',
     status: 'active',
   });
-  const [submissionStatus, setSubmissionStatus] = useState(null);
 
   // --- Data Fetching ---
   const fetchClients = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await getClients();
       const filteredData = response.data.map(item => ({
@@ -42,7 +40,12 @@ const Client = () => {
       }));
       setClients(filteredData);
     } catch (err) {
-      setError('Failed to fetch clients.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch clients.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -80,7 +83,6 @@ const Client = () => {
       });
     }
     setModalMode(mode);
-    setSubmissionStatus(null);
     setShowModal(true);
   };
 
@@ -92,29 +94,31 @@ const Client = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setSubmissionStatus(null);
-    setError('');
 
     try {
       if (modalMode === 'edit' && selectedClient) {
         console.log(selectedClient);
         await updateClient(selectedClient.client_id, form);
-        setSubmissionStatus({ message: 'Client updated successfully.', variant: 'success' });
       } else {
         await createClient(form);
-        setSubmissionStatus({ message: 'Client created successfully.', variant: 'success' });
       }
       
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: modalMode === 'edit' ? 'Client updated successfully.' : 'Client created successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchClients(); // Refresh the table
-      setTimeout(() => {
-        setShowModal(false); // Close modal after success
-      }, 1000);
+      setShowModal(false); // Close modal after success
     } catch (err) {
       console.error('Client Submission Error:', err.response || err);
       const errorMessage = err.response?.data?.message || 'Failed to save client due to an unknown error.';
-      setSubmissionStatus({ 
-        message: errorMessage, 
-        variant: 'danger' 
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMessage,
+        confirmButtonColor: '#286070'
       });
     } finally {
       setLoading(false);
@@ -122,17 +126,38 @@ const Client = () => {
   };
 
   const handleDelete = async (clientId) => {
-    if (!window.confirm('Are you sure you want to delete this client?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this client?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
     setLoading(true);
-    setError('');
     try {
       await deleteClient(clientId);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Client has been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchClients(); // Refresh the table
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete client.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete client.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -152,8 +177,6 @@ const Client = () => {
           <i className="fas fa-plus"></i> Add Client
         </Button>
       </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
       
       {loading && clients.length === 0 ? (
         <Spinner animation="border" />
@@ -190,7 +213,6 @@ const Client = () => {
         onChange={handleChange}
         onSubmit={handleSubmit}
         loading={loading}
-        submissionStatus={submissionStatus}
         mode={modalMode}
       />
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Button, Form, Alert, Spinner, Row, Col } from 'react-bootstrap';
+import { Modal, Button, Form, Spinner, Row, Col } from 'react-bootstrap';
 
 const RcmCreateModal = ({
   show,
@@ -8,7 +8,6 @@ const RcmCreateModal = ({
   onChange,
   onSubmit,
   loading,
-  submissionStatus,
   clients,
   mode = 'create' // 'create' or 'edit'
 }) => {
@@ -19,8 +18,6 @@ const RcmCreateModal = ({
       </Modal.Header>
       <Form onSubmit={onSubmit}>
         <Modal.Body style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-          {submissionStatus && <Alert variant={submissionStatus.variant}>{submissionStatus.message}</Alert>}
-          
           <div className="rcm-details-container">
             {/* Client Selection */}
             <div className="rcm-details-section">

@@ -19,7 +19,6 @@ const PeriodicTestingModal = ({
   checkingDuplicate
 }) => {
   const navigate = useNavigate();
-  const [error, setError] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [comments, setComments] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,7 +37,6 @@ const PeriodicTestingModal = ({
 
   // Reset modal state when closed
   const handleClose = () => {
-    setError('');
     setShowConfirmation(false);
     setComments('');
     setSaving(false);
@@ -58,12 +56,16 @@ const PeriodicTestingModal = ({
     
     // Validate form
     if (!form.client_id || !form.year || !form.quarter || !form.process || !form.control_id) {
-      setError('Please fill in all required fields.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Please fill in all required fields.',
+        confirmButtonColor: '#286070'
+      });
       return;
     }
 
     setSaving(true);
-    setError('');
     
     try {
       // Create the test execution directly
@@ -114,10 +116,14 @@ const PeriodicTestingModal = ({
           confirmButtonText: 'OK',
           confirmButtonColor: '#286070'
         });
-        setError(''); // Clear error state since we're showing SweetAlert
       } else {
-        // For other errors, show in the error state
-        setError(errorMessage);
+        // For other errors, show SweetAlert
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: errorMessage,
+          confirmButtonColor: '#286070'
+        });
       }
       console.error(err);
       setSaving(false);
@@ -129,17 +135,26 @@ const PeriodicTestingModal = ({
   // Handle saving remarks after confirmation
   const handleSaveRemarks = async () => {
     if (!comments || !comments.trim()) {
-      setError('Comments are required.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Comments are required.',
+        confirmButtonColor: '#286070'
+      });
       return;
     }
 
     if (!pendingTestExecutionId) {
-      setError('Test execution ID is missing.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Test execution ID is missing.',
+        confirmButtonColor: '#286070'
+      });
       return;
     }
 
     setSaving(true);
-    setError('');
     
     try {
       // Save remarks
@@ -150,7 +165,6 @@ const PeriodicTestingModal = ({
       
       setShowConfirmation(false);
       setComments('');
-      setError('');
       
       // Notify parent to refresh data
       if (onRemarksSaved) {
@@ -161,7 +175,12 @@ const PeriodicTestingModal = ({
       handleClose();
       navigate(`/periodic-testing/${pendingTestExecutionId}`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save remarks.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to save remarks.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setSaving(false);
@@ -176,8 +195,6 @@ const PeriodicTestingModal = ({
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
-          {error && <Alert variant="danger">{error}</Alert>}
-          {duplicateError && <Alert variant="danger">{duplicateError}</Alert>}
           <Row className="mb-3">
             <Col md={12}>
               <Form.Group controlId="clientSelect">
@@ -290,6 +307,11 @@ const PeriodicTestingModal = ({
               </Form.Group>
             </Col>
           </Row>
+
+          {/* Duplicate error message at bottom above button */}
+          {duplicateError && (
+            <Alert variant="danger" className="mt-3 mb-0">{duplicateError}</Alert>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={handleClose} disabled={saving || loading}>
@@ -308,7 +330,6 @@ const PeriodicTestingModal = ({
       {/* Confirmation Modal for Adding Remarks */}
       <Modal show={showConfirmation} onHide={() => {
         setShowConfirmation(false);
-        setError('');
       }}>
         <Modal.Header closeButton>
           <Modal.Title>Add Remarks</Modal.Title>
@@ -328,14 +349,12 @@ const PeriodicTestingModal = ({
               required
             />
           </Form.Group>
-          {error && <Alert variant="danger">{error}</Alert>}
         </Modal.Body>
         <Modal.Footer>
           <Button 
             variant="secondary" 
             onClick={() => {
               setShowConfirmation(false);
-              setError('');
             }}
           >
             Cancel

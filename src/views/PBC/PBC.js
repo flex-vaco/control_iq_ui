@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
 import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
@@ -26,7 +27,6 @@ const PBC = () => {
     documents: null,
   });
   const [currentDescription, setCurrentDescription] = useState('');
-  const [submissionStatus, setSubmissionStatus] = useState(null);
   const [duplicateError, setDuplicateError] = useState(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [existingDocuments, setExistingDocuments] = useState([]);
@@ -147,7 +147,6 @@ const PBC = () => {
       setExistingDocuments([]);
       setCurrentDescription('');
     }
-    setSubmissionStatus(null);
     setDuplicateError(null);
     setShowModal(true);
   };
@@ -198,6 +197,13 @@ const PBC = () => {
           
           if (response.data.exists) {
             setDuplicateError(response.data.message);
+            // Also show SweetAlert for duplicate error
+            Swal.fire({
+              icon: 'warning',
+              title: 'Duplicate Found',
+              text: response.data.message,
+              confirmButtonColor: '#286070'
+            });
           } else {
             setDuplicateError(null);
           }
@@ -229,19 +235,38 @@ const PBC = () => {
 
 
   const handleDelete = async (evidenceId) => {
-    if (!window.confirm('Are you sure you want to delete this PBC evidence?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this PBC evidence?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
     setLoading(true);
-    setError('');
     try {
-      // We'll need to add deletePbc API function
       await api.delete(`/data/pbc/${evidenceId}`);
-      setError('');
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'PBC evidence has been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
       fetchPbcData(); // Refresh the table
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete PBC evidence.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete PBC evidence.',
+        confirmButtonColor: '#286070'
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -257,8 +282,6 @@ const PBC = () => {
     }
     
     setLoading(true);
-    setSubmissionStatus(null);
-    setError('');
 
     const formData = new FormData();
     formData.append('client_id', form.client_id);
@@ -285,7 +308,6 @@ const PBC = () => {
             'Content-Type': 'multipart/form-data'
           }
         });
-        setSubmissionStatus({ message: 'PBC evidence updated successfully.', variant: 'success' });
         
         // Refresh existing documents after update
         const evidenceId = selectedPbc.evidence_id;
@@ -300,20 +322,26 @@ const PBC = () => {
       } else {
         // Create new PBC
         response = await createPbcRequest(formData);
-        setSubmissionStatus({ message: response.data.message, variant: 'success' });
       }
+      // Show success message
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: modalMode === 'edit' ? 'PBC evidence updated successfully.' : response.data.message || 'PBC evidence created successfully.',
+        confirmButtonColor: '#286070'
+      });
       // Refresh the table (fetch all data)
       fetchPbcData();
-      setTimeout(() => {
-        setShowModal(false); // Close modal on success
-      }, 1000);
+      setShowModal(false); // Close modal on success
     } catch (err) {
       console.error('PBC Submission Error:', err.response || err);
       // Determine the error message
       const errorMessage = err.response?.data?.message || 'Failed to create PBC request due to an unknown error.';
-      setSubmissionStatus({ 
-        message: errorMessage, 
-        variant: 'danger' 
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMessage,
+        confirmButtonColor: '#286070'
       });
     } finally {
       setLoading(false);
@@ -337,8 +365,6 @@ const PBC = () => {
           <i className="fas fa-plus"></i> Add PBC
         </Button>
       </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
       
       {loading && pbcData.length === 0 ? (
         <Spinner animation="border" />
@@ -378,7 +404,6 @@ const PBC = () => {
         rcmControls={rcmControls}
         currentDescription={currentDescription}
         loading={loading}
-        submissionStatus={submissionStatus}
         clients={clients}
         selectedClientId={form.client_id}
         onClientChange={() => {}}
