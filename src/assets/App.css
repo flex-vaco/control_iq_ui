@@ -752,3 +752,17 @@ h2 {
 button.btn{
   border-radius: 50px !important;
 }
+
+.accordion-button:not(.collapsed) {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+h2.accordion-header{
+  border-bottom: none !important;
+}
+.accordion-collapse.collapse {
+  border-top: 1px solid #dee2e6;
+}
+.accordion-button:focus {
+  box-shadow: none !important;
+}

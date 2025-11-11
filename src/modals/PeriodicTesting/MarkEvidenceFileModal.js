@@ -12,6 +12,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
   const [loading, setLoading] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const processedRef = useRef(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const [rectangles, setRectangles] = useState([]);
   const [newRect, setNewRect] = useState(null);
@@ -557,6 +558,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       evidenceDetails: true,
       testResults: false
     });
+    setIsSidebarCollapsed(false);
     onHide();
   };
 
@@ -636,15 +638,26 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       </Modal.Header>
       
       <Modal.Body style={{ padding: 0, height: 'calc(90vh - 120px)' }}>
-        <Row className="g-0" style={{ height: '100%' }}>
+        <div style={{ height: '100%', position: 'relative', display: 'flex', width: '100%' }}>
           {/* Left Sidebar */}
-          <Col md={3} style={{ 
-            borderRight: '1px solid #dee2e6', 
-            backgroundColor: '#f8f9fa',
-            overflowY: 'auto',
-            height: '100%'
-          }}>
-            <div style={{ padding: '1rem' }}>
+          <div
+            style={{ 
+              borderRight: isSidebarCollapsed ? 'none' : '1px solid #dee2e6', 
+              backgroundColor: '#f8f9fa',
+              overflowY: 'auto',
+              height: '100%',
+              transition: 'all 0.3s ease-in-out',
+              padding: 0,
+              width: isSidebarCollapsed ? '0' : '25%',
+              minWidth: isSidebarCollapsed ? '0' : '25%',
+              maxWidth: isSidebarCollapsed ? '0' : '25%',
+              flexShrink: 0,
+              opacity: isSidebarCollapsed ? 0 : 1,
+              overflow: isSidebarCollapsed ? 'hidden' : 'auto',
+              visibility: isSidebarCollapsed ? 'hidden' : 'visible'
+            }}
+          >
+            <div style={{ padding: '1rem', width: '100%' }}>
               {/* Evidence Details - Full Width Tab */}
               <div style={{ marginBottom: '1rem' }}>
                 <div
@@ -768,17 +781,60 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                 )}
               </div>
             </div>
-          </Col>
+          </div>
+
+          {/* Toggle Button - Small Round Arrow in the Middle */}
+          <div
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            style={{
+              position: 'absolute',
+              left: isSidebarCollapsed ? '0' : 'calc(25% - 15px)',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 1000,
+              backgroundColor: '#fff',
+              border: '1px solid #dee2e6',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              width: '30px',
+              height: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              transition: 'all 0.3s ease-in-out',
+              hover: {
+                backgroundColor: '#f8f9fa'
+              }
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+            title={isSidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+          >
+            <i
+              className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'}`}
+              style={{
+                fontSize: '0.75rem',
+                color: '#495057'
+              }}
+            ></i>
+          </div>
 
           {/* Right Column - Image with Drawing Canvas */}
-          <Col md={9} style={{ 
-            backgroundColor: 'white',
-            overflow: 'hidden',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '0.2rem'
-          }}>
+          <div
+            style={{ 
+              backgroundColor: 'white',
+              overflow: 'hidden',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '0.2rem',
+              transition: 'all 0.3s ease-in-out',
+              flex: '1 1 0',
+              minWidth: 0,
+              position: 'relative'
+            }}
+          >
             {documentData && (documentData.display_artifact_url || (existingTestResult && existingTestResult.result_artifact_url)) ? (
               <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {/* Drawing Controls */}
@@ -996,8 +1052,8 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                 </div>
               </div>
             )}
-          </Col>
-        </Row>
+          </div>
+        </div>
       </Modal.Body>
 
       <Modal.Footer>

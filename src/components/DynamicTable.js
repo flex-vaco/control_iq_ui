@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Table, Card, Form, Button, Pagination } from 'react-bootstrap';
+import { Table, Card, Form, Button, Pagination, Accordion } from 'react-bootstrap';
+import * as XLSX from 'xlsx';
 
 const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHeaderMap = {}, itemsPerPage = 10, renderActions = null }) => {
   const [filters, setFilters] = useState({});
@@ -27,6 +28,9 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
     // Special case for control_id
     if (key === 'control_id') {
       return 'Control';
+    }
+    if (key === 'testing_status') {
+      return 'PBC Status';
     }
     return key
       .split('_')
@@ -140,51 +144,106 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
   // Check if any filters are active
   const hasActiveFilters = Object.values(filters).some(v => v && v.trim());
 
+  // Export to Excel function
+  const handleExportToExcel = () => {
+    if (!filteredData || filteredData.length === 0) {
+      return;
+    }
+
+    // Prepare data for export - use filtered data (all filtered rows, not just current page)
+    const exportData = filteredData.map(row => {
+      const exportRow = {};
+      headers.forEach(key => {
+        exportRow[formatHeader(key)] = String(row[key] || '');
+      });
+      return exportRow;
+    });
+
+    // Create a new workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Convert data to worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    
+    // Set column widths
+    const maxWidth = 50;
+    const colWidths = headers.map(() => ({ wch: maxWidth }));
+    worksheet['!cols'] = colWidths;
+    
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+    
+    // Generate filename from title
+    const filename = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    // Write the file
+    XLSX.writeFile(workbook, filename);
+  };
+
   return (
     <Card>
-      <Card.Header as="h5">{title}</Card.Header>
+      <Card.Header as="h5" className="d-flex justify-content-between align-items-center">
+        <span>{title}</span>
+        {/* {filteredData && filteredData.length > 0 && (
+          <Button
+            variant="success"
+            size="sm"
+            onClick={handleExportToExcel}
+            title="Export to Excel"
+          >
+            <i className="fas fa-file-excel"></i> Export to Excel
+          </Button>
+        )} */}
+      </Card.Header>
       <Card.Body>
-        {/* Column Filters */}
+        {/* Column Filters in Accordion */}
         {columnsToFilter.length > 0 && (
-          <div className="table-filter-container">
-            <div className="table-filter-row">
-              {columnsToFilter.map((key) => (
-                <div key={key} className="table-filter-group">
-                  <label htmlFor={`filter-${key}-${tableId}`}>
-                    {formatHeader(key)}
-                  </label>
-                  <Form.Control
-                    id={`filter-${key}-${tableId}`}
-                    type="text"
-                    placeholder={`Filter ${formatHeader(key)}...`}
-                    value={filters[key] || ''}
-                    onChange={(e) => handleFilterChange(key, e.target.value)}
-                  />
-                </div>
-              ))}
-              {hasActiveFilters && (
-                <div className="table-filter-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <Button
-                    onClick={clearFilters}
-                    className="clear-filters-btn"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              )}
-            </div>
+          <Accordion defaultActiveKey="" className="mb-3">
+            <Accordion.Item eventKey="0">
+              <Accordion.Header>Filters</Accordion.Header>
+              <Accordion.Body>
+                <div className="table-filter-container">
+                  <div className="table-filter-row">
+                    {columnsToFilter.map((key) => (
+                      <div key={key} className="table-filter-group">
+                        <label htmlFor={`filter-${key}-${tableId}`}>
+                          {formatHeader(key)}
+                        </label>
+                        <Form.Control
+                          id={`filter-${key}-${tableId}`}
+                          type="text"
+                          placeholder={`Filter ${formatHeader(key)}...`}
+                          value={filters[key] || ''}
+                          onChange={(e) => handleFilterChange(key, e.target.value)}
+                        />
+                      </div>
+                    ))}
+                    {hasActiveFilters && (
+                      <div className="table-filter-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <Button
+                          onClick={clearFilters}
+                          className="clear-filters-btn"
+                        >
+                          Clear Filters
+                        </Button>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Results Count */}
-            <div className="mt-3 text-muted" style={{ fontSize: '0.9rem' }}>
-              {hasActiveFilters 
-                ? `Showing ${filteredData.length} of ${data.length} records`
-                : `Total: ${data.length} records`
-              }
-              {filteredData.length > itemsPerPage && (
-                <span> | Page {currentPage} of {totalPages}</span>
-              )}
-            </div>
-          </div>
+                  {/* Results Count */}
+                  <div className="mt-3 text-muted" style={{ fontSize: '0.9rem' }}>
+                    {hasActiveFilters 
+                      ? `Showing ${filteredData.length} of ${data.length} records`
+                      : `Total: ${data.length} records`
+                    }
+                    {filteredData.length > itemsPerPage && (
+                      <span> | Page {currentPage} of {totalPages}</span>
+                    )}
+                  </div>
+                </div>
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
         )}
 
         {/* Table Container with Fixed Height and Scroll */}

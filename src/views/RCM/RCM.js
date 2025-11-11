@@ -67,13 +67,24 @@ const RCM = () => {
         rcm_id: item.rcm_id || null, // Keep id for edit/delete
         control_id: item.control_id || '',
         client_name: item.client_name || '',
+        control_description: item.control_description || '',
         process : item.process || '',
         sub_process: item.sub_process || '',
-        classification: item.classification || '',
+        summary: item.summary || '',
+        frequency: item.frequency || '',
         automated_manual: item.automated_manual || '',
         preventive_detective: item.preventive_detective || '',
         significance: item.significance || '',
-        _viewDetails: index, // Store index to reference full data
+        risk_rating: item.risk_rating || '',
+        owners: item.owners || '',
+        mitigates: item.mitigates || '',
+        location: item.location || '',
+        key_reports: item.key_reports || '',
+        it_systems: item.it_systems || '',
+        risk_id: item.risk_id || '',
+        risk_description: item.risk_description || '',
+        classification: item.classification || '',
+        _viewDetails: index, 
       }));
       setData(filteredData);
     } catch (err) {
@@ -599,7 +610,7 @@ const RCM = () => {
           data={data} 
           title="RCM Data" 
           tableId="rcm-table"
-          filterableColumns={['client_name', 'control_id', 'process', 'sub_process', 'classification', 'automated_manual', 'preventive_detective', 'significance']}
+          filterableColumns={['client_name', 'control_id', 'process', 'sub_process', 'risk_id', 'risk_description', 'classification', 'automated_manual', 'preventive_detective', 'significance', 'risk_rating', 'summary', 'frequency', 'owners', 'mitigates', 'location', 'key_reports', 'it_systems']}
           renderActions={(row) => (
             <>
               <i
