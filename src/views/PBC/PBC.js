@@ -39,7 +39,10 @@ const PBC = () => {
       const response = await getClientsForDropdown();
       setClients(response.data);
     } catch (err) {
-      console.error('Failed to fetch clients:', err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch clients:', err);
+      }
     }
   };
 
@@ -64,8 +67,11 @@ const PBC = () => {
       }));
       setPbcData(filteredData);
     } catch (err) {
-      setError('Failed to fetch PBC data.');
-      console.error(err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        setError('Failed to fetch PBC data.');
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
@@ -78,7 +84,10 @@ const PBC = () => {
       setRcmControls(response.data);
       return response.data;
     } catch (err) {
-      console.error('Failed to fetch RCM controls:', err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch RCM controls:', err);
+      }
       return null;
     }
   };

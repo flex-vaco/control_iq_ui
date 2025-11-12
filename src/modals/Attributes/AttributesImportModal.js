@@ -66,7 +66,17 @@ const AttributesImportModal = ({
 
           {showPreviewTable && parsedData.length > 0 && (
             <div className="mt-4">
-              <h6>Preview Data ({parsedData.length} records)</h6>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h6 className="mb-0">Preview Data ({parsedData.length} records)</h6>
+                <Button 
+                  variant="success" 
+                  onClick={onSubmit} 
+                  disabled={loading || parsedData.length === 0}
+                  id="submit-button"
+                >
+                  {loading ? <><Spinner as="span" animation="border" size="sm" /> Saving...</> : 'Submit'}
+                </Button>
+              </div>
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <Table striped bordered hover size="sm">
                   <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 10 }}>
@@ -113,7 +123,7 @@ const AttributesImportModal = ({
               variant="success" 
               onClick={onSubmit} 
               disabled={loading || parsedData.length === 0}
-              id="submit-button"
+              id="submit-button-footer"
             >
               {loading ? <><Spinner as="span" animation="border" size="sm" /> Saving...</> : 'Submit'}
             </Button>
