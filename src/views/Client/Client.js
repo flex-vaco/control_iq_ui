@@ -40,13 +40,16 @@ const Client = () => {
       }));
       setClients(filteredData);
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to fetch clients.',
-        confirmButtonColor: '#286070'
-      });
-      console.error(err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to fetch clients.',
+          confirmButtonColor: '#286070'
+        });
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }

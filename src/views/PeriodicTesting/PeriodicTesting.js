@@ -31,7 +31,10 @@ const PeriodicTesting = () => {
       const response = await getClients();
       setClients(response.data);
     } catch (err) {
-      console.error('Failed to fetch clients:', err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch clients:', err);
+      }
     }
   };
 
@@ -41,7 +44,10 @@ const PeriodicTesting = () => {
       const response = await getRcmData(clientId);
       setRcmData(response.data);
     } catch (err) {
-      console.error('Failed to fetch RCM data:', err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch RCM data:', err);
+      }
     }
   };
 
@@ -63,13 +69,16 @@ const PeriodicTesting = () => {
       }));
       setTestingData(filteredData || []);
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to fetch test executions.',
-        confirmButtonColor: '#286070'
-      });
-      console.error(err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to fetch test executions.',
+          confirmButtonColor: '#286070'
+        });
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }

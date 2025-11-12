@@ -35,7 +35,10 @@ const Attributes = () => {
       const response = await getClientsForDropdown();
       setClients(response.data);
     } catch (err) {
-      console.error('Failed to fetch clients:', err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch clients:', err);
+      }
     }
   };
 
@@ -57,13 +60,16 @@ const Attributes = () => {
       }));
       setData(filteredData);
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to fetch Attributes data. Your session may have expired.',
-        confirmButtonColor: '#286070'
-      });
-      console.error(err);
+      // Don't show error for 401 - interceptor handles it
+      if (err.response?.status !== 401) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to fetch Attributes data. Your session may have expired.',
+          confirmButtonColor: '#286070'
+        });
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }

@@ -72,7 +72,10 @@ const TestExecutionDetails = () => {
                   };
                 }
               } catch (err) {
-                console.error(`Error checking status for document ${doc.document_id}:`, err);
+                // Don't show error for 401 - interceptor handles it
+                if (err.response?.status !== 401) {
+                  console.error(`Error checking status for document ${doc.document_id}:`, err);
+                }
                 statusMap[doc.document_id] = {
                   exists: false,
                   status: null
@@ -91,13 +94,19 @@ const TestExecutionDetails = () => {
             );
             setReportData(reportResponse.data.data || []);
           } catch (err) {
-            console.error('Error fetching report data:', err);
+            // Don't show error for 401 - interceptor handles it
+            if (err.response?.status !== 401) {
+              console.error('Error fetching report data:', err);
+            }
             setReportData([]);
           }
         }
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to fetch test execution details.');
-        console.error(err);
+        // Don't show error for 401 - interceptor handles it
+        if (err.response?.status !== 401) {
+          setError(err.response?.data?.message || 'Failed to fetch test execution details.');
+          console.error(err);
+        }
       } finally {
         setLoading(false);
       }

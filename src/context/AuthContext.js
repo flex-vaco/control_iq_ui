@@ -1,6 +1,7 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, setAuthToken } from '../services/api';
+import Swal from 'sweetalert2';
 
 const AuthContext = createContext();
 
@@ -13,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const isShowingAlert = useRef(false);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
@@ -44,7 +46,7 @@ export const AuthProvider = ({ children }) => {
     // Response interceptor to handle unauthorized errors
     const responseInterceptor = api.interceptors.response.use(
       (response) => response, // On success, just return the response
-      (error) => {
+      async (error) => {
         // Check for 401 status code or "Unauthorized. Invalid token." message
         if (
           error.response &&
@@ -54,9 +56,28 @@ export const AuthProvider = ({ children }) => {
              error.response.data.message?.includes('Invalid token') ||
              error.response.data.message?.includes('Unauthorized'))))
         ) {
-          // Token is invalid, logout and redirect to login
-          console.warn('Invalid token detected, redirecting to login...');
-          logout();
+          // Prevent multiple alerts from showing simultaneously
+          if (!isShowingAlert.current) {
+            isShowingAlert.current = true;
+            // Token is invalid, show alert and redirect to login
+            console.warn('Invalid token detected, redirecting to login...');
+            await Swal.fire({
+              icon: 'warning',
+              title: 'Session Expired',
+              text: 'Please login again',
+              confirmButtonColor: '#286070',
+              allowOutsideClick: false,
+              allowEscapeKey: false
+            });
+            logout();
+            // Reset flag after a delay to allow for future alerts
+            setTimeout(() => {
+              isShowingAlert.current = false;
+            }, 1000);
+          } else {
+            // If alert is already showing, just logout without showing another alert
+            logout();
+          }
         }
         return Promise.reject(error);
       }
