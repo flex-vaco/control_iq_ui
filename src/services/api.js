@@ -55,6 +55,10 @@ export const getEvidenceDocuments = (evidenceId) => {
   return api.get(`/data/pbc/${evidenceId}/documents`);
 };
 
+export const deleteEvidenceDocument = (documentId) => {
+  return api.delete(`/data/pbc/documents/${documentId}`);
+};
+
 export const createPbcRequest = (formData) => {
   return api.post('/data/pbc', formData, {
     headers: {

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import DynamicTable from '../../components/DynamicTable';
-import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments } from '../../services/api';
+import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, deleteEvidenceDocument } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
 
 const PBC = () => {
   const [pbcData, setPbcData] = useState([]);
   const [rcmControls, setRcmControls] = useState([]);
   const [loading, setLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [error, setError] = useState('');
   const [clients, setClients] = useState([]);
   
@@ -273,6 +274,53 @@ const PBC = () => {
     }
   };
 
+  const handleDeleteDocument = async (documentId) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this document?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    setLoadingDocuments(true);
+    try {
+      await deleteEvidenceDocument(documentId);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Document has been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
+      
+      // Refresh the documents list
+      if (selectedPbc && selectedPbc.evidence_id) {
+        const response = await getEvidenceDocuments(selectedPbc.evidence_id);
+        setExistingDocuments(response.data || []);
+      }
+      
+      // Refresh the table to update document count
+      fetchPbcData();
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete document.',
+        confirmButtonColor: '#286070'
+      });
+      console.error(err);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -412,6 +460,7 @@ const PBC = () => {
         checkingDuplicate={checkingDuplicate}
         existingDocuments={existingDocuments}
         loadingDocuments={loadingDocuments}
+        onDeleteDocument={modalMode === 'edit' ? handleDeleteDocument : null}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Table, Card, Form, Button, Pagination, Accordion } from 'react-bootstrap';
-import * as XLSX from 'xlsx';
+// import * as XLSX from 'xlsx';
 
 const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHeaderMap = {}, itemsPerPage = 10, renderActions = null }) => {
   const [filters, setFilters] = useState({});
@@ -145,40 +145,40 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
   const hasActiveFilters = Object.values(filters).some(v => v && v.trim());
 
   // Export to Excel function
-  const handleExportToExcel = () => {
-    if (!filteredData || filteredData.length === 0) {
-      return;
-    }
+  // const handleExportToExcel = () => {
+  //   if (!filteredData || filteredData.length === 0) {
+  //     return;
+  //   }
 
-    // Prepare data for export - use filtered data (all filtered rows, not just current page)
-    const exportData = filteredData.map(row => {
-      const exportRow = {};
-      headers.forEach(key => {
-        exportRow[formatHeader(key)] = String(row[key] || '');
-      });
-      return exportRow;
-    });
+  //   // Prepare data for export - use filtered data (all filtered rows, not just current page)
+  //   const exportData = filteredData.map(row => {
+  //     const exportRow = {};
+  //     headers.forEach(key => {
+  //       exportRow[formatHeader(key)] = String(row[key] || '');
+  //     });
+  //     return exportRow;
+  //   });
 
-    // Create a new workbook
-    const workbook = XLSX.utils.book_new();
+  //   // Create a new workbook
+  //   const workbook = XLSX.utils.book_new();
     
-    // Convert data to worksheet
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+  //   // Convert data to worksheet
+  //   const worksheet = XLSX.utils.json_to_sheet(exportData);
     
-    // Set column widths
-    const maxWidth = 50;
-    const colWidths = headers.map(() => ({ wch: maxWidth }));
-    worksheet['!cols'] = colWidths;
+  //   // Set column widths
+  //   const maxWidth = 50;
+  //   const colWidths = headers.map(() => ({ wch: maxWidth }));
+  //   worksheet['!cols'] = colWidths;
     
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+  //   // Add worksheet to workbook
+  //   XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
     
-    // Generate filename from title
-    const filename = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  //   // Generate filename from title
+  //   const filename = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     
-    // Write the file
-    XLSX.writeFile(workbook, filename);
-  };
+  //   // Write the file
+  //   XLSX.writeFile(workbook, filename);
+  // };
 
   return (
     <Card>

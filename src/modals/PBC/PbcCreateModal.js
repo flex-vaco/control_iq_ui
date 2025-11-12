@@ -18,7 +18,8 @@ const PbcCreateModal = ({
   duplicateError,
   checkingDuplicate,
   existingDocuments = [],
-  loadingDocuments = false
+  loadingDocuments = false,
+  onDeleteDocument = null
 }) => {
   const testingStatuses = ['Pending', 'Partial Received', 'Received'];
   
@@ -152,7 +153,7 @@ const PbcCreateModal = ({
             </Col>
             <Col md={6}>
               <Form.Group controlId="testingStatusSelect">
-                <Form.Label>Testing Status <span className="text-danger">*</span></Form.Label>
+                <Form.Label>PBC Status <span className="text-danger">*</span></Form.Label>
                 <Form.Control 
                   as="select" 
                   name="testing_status"
@@ -170,7 +171,7 @@ const PbcCreateModal = ({
           </Row>
 
           <Form.Group controlId="documentUpload" className="mb-3">
-            <Form.Label>Upload Document(s) (Optional - Accepts any file type)</Form.Label>
+            <Form.Label>Upload Document(s){mode === 'edit' && (<span className="italic"> - You will have to re-test the newly uploaded document(s)</span>)}</Form.Label>
             <Form.Control 
               type="file" 
               onChange={onFileChange} 
@@ -208,6 +209,18 @@ const PbcCreateModal = ({
                           <i className="fas fa-file me-2"></i>
                           {doc.document_name || fileName}
                         </a>
+                        {onDeleteDocument && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="text-danger p-0 ms-2"
+                            onClick={() => onDeleteDocument(doc.document_id)}
+                            disabled={loading}
+                            title="Delete document"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </Button>
+                        )}
                       </ListGroup.Item>
                     );
                   })}
