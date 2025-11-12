@@ -766,3 +766,6 @@ h2.accordion-header{
 .accordion-button:focus {
   box-shadow: none !important;
 }
+.italic {
+  font-style: italic;
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Modal, Button, Row, Col } from 'react-bootstrap';
+import { Modal, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
 import { api } from '../../services/api';
