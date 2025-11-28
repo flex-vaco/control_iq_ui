@@ -13,6 +13,9 @@ import Attributes from './views/Attributes/Attributes';
 import Client from './views/Client/Client';
 import PeriodicTesting from './views/PeriodicTesting/PeriodicTesting';
 import TestExecutionDetails from './views/PeriodicTesting/TestExecutionDetails';
+import UserManagement from './views/UserManagement/UserManagement';
+import RoleManagement from './views/RoleManagement/RoleManagement';
+import AccessControl from './views/AccessControl/AccessControl';
 // --- END OF UPDATES ---
 
 function App() {
@@ -32,6 +35,9 @@ function App() {
           <Route path="/client" element={<Client />} />
           <Route path="/periodic-testing" element={<PeriodicTesting />} />
           <Route path="/periodic-testing/:id" element={<TestExecutionDetails />} />
+          <Route path="/user-management" element={<UserManagement />} />
+          <Route path="/role-management" element={<RoleManagement />} />
+          <Route path="/access-control" element={<AccessControl />} />
         </Route>
       </Route>
 

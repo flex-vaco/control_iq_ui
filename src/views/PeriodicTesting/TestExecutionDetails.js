@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } from 'react-bootstrap';
-import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments } from '../../services/api';
+import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult } from '../../services/api';
+import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
+import Swal from 'sweetalert2';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
 import ReportModal from '../../modals/PeriodicTesting/ReportModal';
 import AddEvidenceDocumentsModal from '../../modals/PeriodicTesting/AddEvidenceDocumentsModal';
@@ -16,6 +18,7 @@ const TestExecutionDetails = () => {
   const [testExecution, setTestExecution] = useState(null);
   const [rcmDetails, setRcmDetails] = useState(null);
   const [evidenceDocuments, setEvidenceDocuments] = useState([]);
+  const [policyDocuments, setPolicyDocuments] = useState([]);
   const [evidenceDetails, setEvidenceDetails] = useState(null);
   const [testAttributes, setTestAttributes] = useState([]);
   const [showMarkEvidenceFileModal, setShowMarkEvidenceFileModal] = useState(false);
@@ -42,6 +45,8 @@ const TestExecutionDetails = () => {
         setRcmDetails(response.data.rcm_details);
         const evidenceDocs = response.data.evidence_documents || [];
         setEvidenceDocuments(evidenceDocs);
+        const policyDocs = response.data.policy_documents || [];
+        setPolicyDocuments(policyDocs);
         setTestAttributes(response.data.test_attributes || []);
         setEvidenceDetails(response.data.evidence_details || null);
         // Check status for each evidence document
@@ -321,7 +326,188 @@ const TestExecutionDetails = () => {
       {/* Consolidated Information Section */}
       <Card className="mb-4">
         <Card.Header>
-          <h6 className="mb-0">Test Execution Details</h6>
+          <div className="d-flex justify-content-between align-items-center">
+            <h6 className="mb-0">Test Execution Details</h6>
+            {testExecution.status !== 'completed' && (
+              <div className="d-flex gap-2">
+                <select
+                  value={testExecution.status || 'pending'}
+                  onChange={async (e) => {
+                    if (e.target.value === 'completed') {
+                      Swal.fire({
+                        title: 'Confirm Status Change',
+                        text: 'Are you sure you want to mark this test execution as completed? Once completed, you cannot change the results for attributes or the overall test. This action cannot be reverted.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#286070',
+                        cancelButtonColor: '#6c757d',
+                        confirmButtonText: 'Yes, mark as completed',
+                        cancelButtonText: 'Cancel'
+                      }).then(async (result) => {
+                        if (result.isConfirmed) {
+                          // Show result selection dialog
+                          const { value: selectedResult } = await Swal.fire({
+                            title: 'Select Final Result',
+                            text: 'Please select the final result for this test execution. This cannot be changed once set.',
+                            input: 'select',
+                            inputOptions: {
+                              'pass': 'Pass',
+                              'fail': 'Fail',
+                              'partial': 'Partial',
+                              'na': 'N/A'
+                            },
+                            inputPlaceholder: 'Select result',
+                            showCancelButton: true,
+                            confirmButtonColor: '#286070',
+                            cancelButtonColor: '#6c757d',
+                            confirmButtonText: 'Confirm',
+                            cancelButtonText: 'Cancel',
+                            inputValidator: (value) => {
+                              if (!value) {
+                                return 'You need to select a result!';
+                              }
+                            }
+                          });
+
+                          if (selectedResult) {
+                            try {
+                              await updateTestExecutionStatusAndResult({
+                                test_execution_id: testExecution.test_execution_id,
+                                status: 'completed',
+                                result: selectedResult
+                              });
+                              
+                              Swal.fire({
+                                icon: 'success',
+                                title: 'Success!',
+                                text: 'Test execution marked as completed.',
+                                confirmButtonColor: '#286070'
+                              });
+
+                              // Refresh the page data
+                              const response = await getTestExecutionById(id);
+                              setTestExecution(response.data.test_execution);
+                              
+                              // Refresh report data
+                              try {
+                                const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+                                setReportData(reportResponse.data.data || []);
+                              } catch (err) {
+                                console.error('Error refreshing report data:', err);
+                              }
+                            } catch (error) {
+                              console.error('Error updating status:', error);
+                              Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: error.response?.data?.message || 'Failed to update status. Please try again.',
+                                confirmButtonColor: '#286070'
+                              });
+                            }
+                          }
+                        }
+                      });
+                    } else {
+                      // For non-completed status changes, just update directly
+                      try {
+                        await updateTestExecutionStatusAndResult({
+                          test_execution_id: testExecution.test_execution_id,
+                          status: e.target.value,
+                          result: testExecution.result || 'na'
+                        });
+                        
+                        // Refresh the page data
+                        const response = await getTestExecutionById(id);
+                        setTestExecution(response.data.test_execution);
+                        
+                        // Refresh report data
+                        try {
+                          const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+                          setReportData(reportResponse.data.data || []);
+                        } catch (err) {
+                          console.error('Error refreshing report data:', err);
+                        }
+                      } catch (error) {
+                        console.error('Error updating status:', error);
+                        Swal.fire({
+                          icon: 'error',
+                          title: 'Error',
+                          text: error.response?.data?.message || 'Failed to update status. Please try again.',
+                          confirmButtonColor: '#286070'
+                        });
+                      }
+                    }
+                  }}
+                  style={{
+                    fontSize: '0.875rem',
+                    padding: '0.25rem 0.5rem',
+                    border: '1px solid #dee2e6',
+                    borderRadius: '0.25rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                </select>
+                {testExecution.status !== 'completed' && (
+                  <select
+                    value={testExecution.result || 'na'}
+                    onChange={async (e) => {
+                      try {
+                        await updateTestExecutionStatusAndResult({
+                          test_execution_id: testExecution.test_execution_id,
+                          status: testExecution.status || 'pending',
+                          result: e.target.value
+                        });
+                        
+                        // Refresh the page data
+                        const response = await getTestExecutionById(id);
+                        setTestExecution(response.data.test_execution);
+                        
+                        // Refresh report data
+                        try {
+                          const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+                          setReportData(reportResponse.data.data || []);
+                        } catch (err) {
+                          console.error('Error refreshing report data:', err);
+                        }
+                      } catch (error) {
+                        console.error('Error updating result:', error);
+                        Swal.fire({
+                          icon: 'error',
+                          title: 'Error',
+                          text: error.response?.data?.message || 'Failed to update result. Please try again.',
+                          confirmButtonColor: '#286070'
+                        });
+                      }
+                    }}
+                    style={{
+                      fontSize: '0.875rem',
+                      padding: '0.25rem 0.5rem',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '0.25rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="na">N/A</option>
+                    <option value="pass">Pass</option>
+                    <option value="fail">Fail</option>
+                    <option value="partial">Partial</option>
+                  </select>
+                )}
+              </div>
+            )}
+            {testExecution.status === 'completed' && (
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge bg-success">Completed</span>
+                <span className="badge bg-info">
+                  Result: {testExecution.result ? testExecution.result.charAt(0).toUpperCase() + testExecution.result.slice(1) : 'N/A'}
+                </span>
+              </div>
+            )}
+          </div>
         </Card.Header>
         <Card.Body className="pt-1 pb-1 pl-4 pr-4">
           <Row>
@@ -366,7 +552,59 @@ const TestExecutionDetails = () => {
             {/* Policy Tab */}
             <Tab eventKey="policy" title="Policy">
               <div className="mt-3">
-                <Alert variant="info">Policy data will be displayed here.</Alert>
+                <h5>Policy Documents</h5>
+                {policyDocuments.length > 0 ? (
+                  <Table striped bordered hover responsive>
+                    <thead>
+                      <tr>
+                        <th>Document Name</th>
+                        <th>Upload Date</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {policyDocuments.map((doc) => {
+                        const documentUrl = getDocumentUrl(doc.artifact_url);
+                        const fileName = doc.document_name || doc.artifact_url.split('/').pop() || 'Document';
+                        return (
+                          <tr key={doc.document_id}>
+                            <td>
+                              <a 
+                                href={documentUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-decoration-none"
+                              >
+                                <i className="fas fa-file me-2"></i>
+                                {fileName}
+                              </a>
+                            </td>
+                            <td>
+                              {doc.created_date 
+                                ? new Date(doc.created_date).toLocaleDateString() 
+                                : doc.created_at 
+                                  ? new Date(doc.created_at).toLocaleDateString() 
+                                  : '-'}
+                            </td>
+                            <td>
+                              <Button
+                                variant="link"
+                                size="sm"
+                                href={documentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <i className="fas fa-external-link-alt"></i> View
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                ) : (
+                  <Alert variant="info">No policy documents available.</Alert>
+                )}
               </div>
             </Tab>
 
@@ -461,7 +699,7 @@ const TestExecutionDetails = () => {
                                 variant="outline-primary" 
                                 size="sm"
                                 onClick={() => handleMarkEvidenceFile(doc)}
-                                disabled={processingDocumentId !== null}
+                                disabled={processingDocumentId !== null || testExecution.status === 'completed'}
                               >
                                 {processingDocumentId === doc.document_id ? (
                                   <>

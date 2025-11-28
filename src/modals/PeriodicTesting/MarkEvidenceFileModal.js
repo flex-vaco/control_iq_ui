@@ -3,6 +3,7 @@ import { Modal, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
 import { api } from '../../services/api';
+import { updateTestExecutionEvidenceResult } from '../../services/api';
 
 const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmDetails, existingTestResult }) => {
   const [expandedSections, setExpandedSections] = useState({
@@ -11,6 +12,8 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
   });
   const [loading, setLoading] = useState(false);
   const [testResults, setTestResults] = useState(null);
+  const [editedTestResults, setEditedTestResults] = useState(null);
+  const [savingResults, setSavingResults] = useState(false);
   const processedRef = useRef(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -315,6 +318,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       // Set test results from the response
       if (response.data && response.data.results) {
         setTestResults(response.data.results);
+        setEditedTestResults(JSON.parse(JSON.stringify(response.data.results))); // Deep copy for editing
       }
     } catch (error) {
       console.error('Error comparing attributes:', error);
@@ -344,11 +348,14 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     if (!show || !documentData) {
       processedRef.current = null; // Reset when modal closes
       setTestResults(null);
+      setEditedTestResults(null);
       return;
     }
     
     if (existingTestResult && existingTestResult.results) {
-      setTestResults(existingTestResult.results);
+      const results = existingTestResult.results;
+      setTestResults(results);
+      setEditedTestResults(JSON.parse(JSON.stringify(results))); // Deep copy for editing
       processedRef.current = documentData.document_id;
       return;
     }
@@ -372,6 +379,12 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       compareAttributes();
     }
   }, [show, documentData, existingTestResult, fetchEvidenceAIDetails, compareAttributes, testResults]);
+
+  useEffect(() => {
+    if (testResults && !editedTestResults) {
+      setEditedTestResults(JSON.parse(JSON.stringify(testResults))); // Deep copy when testResults changes
+    }
+  }, [testResults]);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => {
@@ -559,8 +572,88 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       testResults: false
     });
     setIsSidebarCollapsed(false);
+    setEditedTestResults(null);
     onHide();
   };
+
+  const handleAttributeResultChange = (index, newValue) => {
+    if (!editedTestResults || !editedTestResults.attributes_results) return;
+    
+    const updated = JSON.parse(JSON.stringify(editedTestResults));
+    updated.attributes_results[index].attribute_final_result = newValue;
+    
+    // Recalculate totals
+    const passed = updated.attributes_results.filter(attr => attr.attribute_final_result === true).length;
+    const failed = updated.attributes_results.filter(attr => attr.attribute_final_result === false).length;
+    updated.total_attributes_passed = passed;
+    updated.total_attributes_failed = failed;
+    updated.final_result = failed === 0; // All passed = true
+    updated.manual_final_result = updated.manual_final_result !== undefined ? updated.manual_final_result : updated.final_result;
+    
+    setEditedTestResults(updated);
+  };
+
+  const handleManualFinalResultChange = (newValue) => {
+    if (!editedTestResults) return;
+    
+    const updated = JSON.parse(JSON.stringify(editedTestResults));
+    updated.manual_final_result = newValue;
+    setEditedTestResults(updated);
+  };
+
+  const handleSaveResults = async () => {
+    if (!editedTestResults || !testExecution || !documentData) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Unable to save: Missing required data.',
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
+    // Check if test execution is completed
+    if (testExecution.status === 'completed') {
+      Swal.fire({
+        icon: 'error',
+        title: 'Cannot Update',
+        text: 'Cannot update results when test execution is completed.',
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
+    setSavingResults(true);
+    try {
+      await updateTestExecutionEvidenceResult({
+        test_execution_id: testExecution.test_execution_id,
+        evidence_document_id: documentData.document_id,
+        updated_result: editedTestResults
+      });
+
+      // Update local state
+      setTestResults(JSON.parse(JSON.stringify(editedTestResults)));
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'Results updated successfully!',
+        confirmButtonColor: '#286070'
+      });
+    } catch (error) {
+      console.error('Error saving results:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to save results. Please try again.',
+        confirmButtonColor: '#286070'
+      });
+    } finally {
+      setSavingResults(false);
+    }
+  };
+
+  const isTestExecutionCompleted = testExecution?.status === 'completed';
 
   const renderEvidenceDetails = (data) => {
     if (!data) return <p style={{ margin: 0, fontSize: '0.9rem', color: '#6c757d' }}>N/A</p>;
@@ -711,62 +804,112 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                 </div>
                 
                 {expandedSections.testResults && (
-                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem' }}>
+                  <div style={{ padding: '0.75rem', backgroundColor: 'white', border: '1px solid #dee2e6', borderTop: 'none', borderRadius: '0 0 0.25rem 0.25rem', maxHeight: '50vh', overflowY: 'auto' }}>
                     {loading ? (
                       <p style={{ margin: 0, fontSize: '0.9rem', color: '#6c757d' }}>Loading test results...</p>
-                    ) : testResults ? (
+                    ) : editedTestResults ? (
                       <div>
-                        {testResults.attributes_results && testResults.attributes_results.length > 0 ? (
+                        {editedTestResults.attributes_results && editedTestResults.attributes_results.length > 0 ? (
                           <div>
-                            {testResults.attributes_results.map((attr, index) => (
-                              <div key={index} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '0.25rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                                  <strong style={{ fontSize: '0.9rem' }}>{attr.attribute_name || 'N/A'}</strong>
-                                  <span style={{ 
-                                    fontSize: '0.8rem', 
-                                    padding: '0.25rem 0.5rem', 
-                                    borderRadius: '0.25rem',
-                                    backgroundColor: attr.result ? '#d4edda' : '#f8d7da',
-                                    color: attr.result ? '#155724' : '#721c24'
-                                  }}>
-                                    {attr.result ? 'Pass' : 'Fail'}
-                                  </span>
+                            {editedTestResults.attributes_results.map((attr, index) => {
+                              const displayResult = attr.attribute_final_result !== undefined ? attr.attribute_final_result : attr.result;
+                              return (
+                                <div key={index} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '0.25rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                    <strong style={{ fontSize: '0.9rem' }}>{attr.attribute_name || 'N/A'}</strong>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                      <span style={{ 
+                                        fontSize: '0.8rem', 
+                                        padding: '0.25rem 0.5rem', 
+                                        borderRadius: '0.25rem',
+                                        backgroundColor: displayResult ? '#d4edda' : '#f8d7da',
+                                        color: displayResult ? '#155724' : '#721c24'
+                                      }}>
+                                        {displayResult ? 'Pass' : 'Fail'}
+                                      </span>
+                                      {!isTestExecutionCompleted && (
+                                        <select
+                                          value={attr.attribute_final_result !== undefined ? (attr.attribute_final_result ? 'true' : 'false') : (attr.result ? 'true' : 'false')}
+                                          onChange={(e) => handleAttributeResultChange(index, e.target.value === 'true')}
+                                          style={{
+                                            fontSize: '0.8rem',
+                                            padding: '0.25rem 0.5rem',
+                                            border: '1px solid #dee2e6',
+                                            borderRadius: '0.25rem',
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          <option value="true">Pass</option>
+                                          <option value="false">Fail</option>
+                                        </select>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {attr.attribute_description && (
+                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
+                                      {attr.attribute_description}
+                                    </p>
+                                  )}
+                                  {attr.test_steps && (
+                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
+                                      <strong>Test Steps:</strong> {attr.test_steps}
+                                    </p>
+                                  )}
+                                  {attr.reason && (
+                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d', fontStyle: 'italic' }}>
+                                      {attr.reason}
+                                    </p>
+                                  )}
                                 </div>
-                                {attr.attribute_description && (
-                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
-                                    {attr.attribute_description}
-                                  </p>
-                                )}
-                                {attr.test_steps && (
-                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
-                                    <strong>Test Steps:</strong> {attr.test_steps}
-                                  </p>
-                                )}
-                                {attr.reason && (
-                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d', fontStyle: 'italic' }}>
-                                    {attr.reason}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
-                            {testResults.summary && (
+                              );
+                            })}
+                            {editedTestResults.summary && (
                               <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#e9ecef', borderRadius: '0.25rem' }}>
                                 <strong>Summary:</strong>
-                                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>{testResults.summary}</p>
+                                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>{editedTestResults.summary}</p>
                               </div>
                             )}
-                            {(testResults.total_attributes !== undefined || testResults.total_attributes_passed !== undefined || testResults.total_attributes_failed !== undefined) && (
+                            {(editedTestResults.total_attributes !== undefined || editedTestResults.total_attributes_passed !== undefined || editedTestResults.total_attributes_failed !== undefined) && (
                               <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#6c757d' }}>
                                 <p style={{ margin: '0.25rem 0' }}>
-                                  Total Attributes: {testResults.total_attributes || 0} | 
-                                  Passed: {testResults.total_attributes_passed || 0} | 
-                                  Failed: {testResults.total_attributes_failed || 0}
+                                  Total Attributes: {editedTestResults.total_attributes || 0} | 
+                                  Passed: {editedTestResults.total_attributes_passed || 0} | 
+                                  Failed: {editedTestResults.total_attributes_failed || 0}
                                 </p>
-                                {testResults.final_result !== undefined && (
-                                  <p style={{ margin: '0.25rem 0', fontWeight: 'bold', color: testResults.final_result ? '#155724' : '#721c24' }}>
-                                    Final Result: {testResults.final_result ? 'Pass' : 'Fail'}
+                                <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <p style={{ margin: '0.25rem 0', fontWeight: 'bold', color: (editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? '#155724' : '#721c24' }}>
+                                    Final Result: {(editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? 'Pass' : 'Fail'}
                                   </p>
-                                )}
+                                  {!isTestExecutionCompleted && (
+                                    <select
+                                      value={editedTestResults.manual_final_result !== undefined ? (editedTestResults.manual_final_result ? 'true' : 'false') : (editedTestResults.final_result ? 'true' : 'false')}
+                                      onChange={(e) => handleManualFinalResultChange(e.target.value === 'true')}
+                                      style={{
+                                        fontSize: '0.8rem',
+                                        padding: '0.25rem 0.5rem',
+                                        border: '1px solid #dee2e6',
+                                        borderRadius: '0.25rem',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="true">Pass</option>
+                                      <option value="false">Fail</option>
+                                    </select>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {!isTestExecutionCompleted && (
+                              <div style={{ marginTop: '1rem' }}>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={handleSaveResults}
+                                  disabled={savingResults}
+                                  style={{ width: '100%' }}
+                                >
+                                  {savingResults ? 'Saving...' : 'Save Results'}
+                                </Button>
                               </div>
                             )}
                           </div>

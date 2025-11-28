@@ -7,10 +7,22 @@ const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [adminOpen, setAdminOpen] = useState(
+    location.pathname.includes('/user-management') ||
+    location.pathname.includes('/role-management') ||
+    location.pathname.includes('/access-control')
+  );
   const [testingOpen, setTestingOpen] = useState(location.pathname.includes('/periodic-testing'));
 
-  // Keep Testing submenu open when on periodic-testing route
+  // Keep submenus open when on their respective routes
   useEffect(() => {
+    if (
+      location.pathname.includes('/user-management') ||
+      location.pathname.includes('/role-management') ||
+      location.pathname.includes('/access-control')
+    ) {
+      setAdminOpen(true);
+    }
     if (location.pathname.includes('/periodic-testing')) {
       setTestingOpen(true);
     }
@@ -79,6 +91,56 @@ const Sidebar = () => {
             </div>
           </Collapse>
         </Nav.Item>
+        
+        <Nav.Item>
+          <Nav.Link
+            onClick={(e) => {
+              e.preventDefault();
+              setAdminOpen(!adminOpen);
+            }}
+            active={adminOpen}
+            style={{ cursor: 'pointer' }}
+          >
+            <i className={`fas fa-chevron-${adminOpen ? 'down' : 'right'}`} style={{ marginRight: '8px', fontSize: '12px' }}></i>
+            Administration
+          </Nav.Link>
+          <Collapse in={adminOpen}>
+            <div style={{ marginLeft: '20px', marginTop: '5px' }}>
+              <Nav.Item>
+                <Nav.Link 
+                  as={NavLink} 
+                  to="/user-management" 
+                  id="nav-user-management"
+                  className="submenu-link"
+                >
+                  User Management
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link 
+                  as={NavLink} 
+                  to="/role-management" 
+                  id="nav-role-management"
+                  className="submenu-link"
+                >
+                  Role Management
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link 
+                  as={NavLink} 
+                  to="/access-control" 
+                  id="nav-access-control"
+                  className="submenu-link"
+                >
+                  Access Control
+                </Nav.Link>
+              </Nav.Item>
+            </div>
+          </Collapse>
+        </Nav.Item>
+        
+        
       </Nav>
       <hr />
       <div>
