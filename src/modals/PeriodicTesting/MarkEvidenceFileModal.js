@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
-import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
-import { api } from '../../services/api';
-import { updateTestExecutionEvidenceResult } from '../../services/api';
+import { api, updateTestExecutionEvidenceResult, checkTestExecutionEvidence } from '../../services/api';
+import ImageEditor from '../../components/PeriodicTesting/ImageEditor';
+import PDFEditor from '../../components/PeriodicTesting/PDFEditor';
 
 const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmDetails, existingTestResult }) => {
   const [expandedSections, setExpandedSections] = useState({
@@ -17,279 +17,67 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
   const processedRef = useRef(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
-  const [rectangles, setRectangles] = useState([]);
-  const [newRect, setNewRect] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [boxColor, setBoxColor] = useState("#ff0000");
-  const [textColor, setTextColor] = useState("#ffffff");
-  const [konvaImage, setKonvaImage] = useState(null);
-  // eslint-disable-next-line no-unused-vars
-  const [scale, setScale] = useState(1);
-  // eslint-disable-next-line no-unused-vars
-  const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
-  const [undoStack, setUndoStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
-  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const stageRef = useRef();
-  const canvasContainerRef = useRef();
-  const initialRectanglesRef = useRef([]); 
+  const [editorHasChanges, setEditorHasChanges] = useState(false);
+  const editorRef = useRef(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const fileInputRef = useRef(null); 
 
-  useEffect(() => {
-    if (!show) return;
+  // Helper function to get document URL
+  const getDocumentUrl = () => {
+    if (!documentData) return null;
     
-    const updateCanvasSize = () => {
-      if (canvasContainerRef.current) {
-        const container = canvasContainerRef.current;
-        setCanvasSize({
-          width: container.clientWidth || 800,
-          height: container.clientHeight || 600
-        });
-      }
-    };
-
-    const timeoutId = setTimeout(updateCanvasSize, 100);
-    window.addEventListener('resize', updateCanvasSize);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', updateCanvasSize);
-    };
-  }, [show]);
-
-  const fitImageToScreen = useCallback(() => {
-    if (!konvaImage || !stageRef.current || !canvasContainerRef.current) return;
-    
-    const stage = stageRef.current;
-    const container = canvasContainerRef.current;
-    const containerWidth = container.clientWidth || canvasSize.width;
-    const containerHeight = container.clientHeight || canvasSize.height;
-    
-    const imageWidth = konvaImage.width;
-    const imageHeight = konvaImage.height;
-    
-    if (imageWidth === 0 || imageHeight === 0) return;
-    
-    const padding = 20;
-    const scaleX = (containerWidth - padding * 2) / imageWidth;
-    const scaleY = (containerHeight - padding * 2) / imageHeight;
-    const fitScale = Math.min(scaleX, scaleY, 1); 
-    
-    stage.scale({ x: 1, y: 1 });
-    stage.position({ x: 0, y: 0 });
-    
-    // Calculate new position to center the scaled image
-    const scaledWidth = imageWidth * fitScale;
-    const scaledHeight = imageHeight * fitScale;
-    const x = (containerWidth - scaledWidth) / 2;
-    const y = (containerHeight - scaledHeight) / 2;
-    
-    stage.scale({ x: fitScale, y: fitScale });
-    stage.position({ x, y });
-    stage.batchDraw();
-    setScale(fitScale);
-    setStagePosition({ x, y });
-  }, [konvaImage, canvasSize]);
-
-  // ----- IMAGE LOADING -----
-  useEffect(() => {
-    let imageUrl = null;
-    
-    if (documentData) {
       if (existingTestResult && existingTestResult.result_artifact_url) {
         const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
         const baseUrl = apiUrl.replace('/api', '');
         const resultUrl = existingTestResult.result_artifact_url;
         if (resultUrl.startsWith('uploads/')) {
-          imageUrl = `${baseUrl}/${resultUrl}`;
+        return `${baseUrl}/${resultUrl}`;
         } else if (resultUrl.startsWith('executionevidence/')) {
-          imageUrl = `${baseUrl}/uploads/${resultUrl}`;
+        return `${baseUrl}/uploads/${resultUrl}`;
         } else {
-          imageUrl = `${baseUrl}/uploads/${resultUrl}`;
+        return `${baseUrl}/uploads/${resultUrl}`;
         }
       } else if (documentData.display_artifact_url) {
-        imageUrl = documentData.display_artifact_url;
-      }
+      return documentData.display_artifact_url;
     }
     
-    if (imageUrl) {
-      const img = new window.Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        setKonvaImage(img);
-      };
-      img.onerror = () => {
-        console.error('Failed to load image from:', imageUrl);
-        setKonvaImage(null);
-      };
-      img.src = imageUrl;
-    } else {
-      setKonvaImage(null);
-    }
-    setRectangles([]);
-    setNewRect(null);
-    setUndoStack([]);
-    setRedoStack([]);
-    setScale(1);
-    setStagePosition({ x: 0, y: 0 });
-    initialRectanglesRef.current = []; // Reset initial state
-  }, [documentData, existingTestResult]);
+    return null;
+  };
 
-  useEffect(() => {
-    if (konvaImage && canvasSize.width > 0 && canvasSize.height > 0) {
-      setTimeout(() => {
-        fitImageToScreen();
-      }, 100);
-      
-      const timer = setTimeout(() => {
-        if (initialRectanglesRef.current.length === 0) {
-          initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
-        }
-      }, 200);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [konvaImage, canvasSize, fitImageToScreen, rectangles]);
-
-  useEffect(() => {
-    if (konvaImage && initialRectanglesRef.current.length === 0 && rectangles.length === 0) {
-      initialRectanglesRef.current = [];
-    } else if (konvaImage && initialRectanglesRef.current.length === 0 && rectangles.length > 0) {
-      const timer = setTimeout(() => {
-        initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [konvaImage, rectangles]);
-
-  const rectanglesChanged = useCallback(() => {
-    if (rectangles.length !== initialRectanglesRef.current.length) {
-      return true;
+  // Helper function to detect file type
+  const getFileType = () => {
+    const url = getDocumentUrl();
+    if (!url) return null;
+    
+    const urlLower = url.toLowerCase();
+    if (urlLower.endsWith('.pdf')) {
+      return 'pdf';
+    } else if (urlLower.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/)) {
+      return 'image';
+    } else if (urlLower.match(/\.(doc|docx)$/)) {
+      return 'doc';
+    } else if (urlLower.match(/\.(xls|xlsx)$/)) {
+      return 'xlsx';
     }
     
-    const currentSorted = [...rectangles].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-    const initialSorted = [...initialRectanglesRef.current].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+    // Check from artifact_url if available
+    const artifactUrl = documentData?.artifact_url || '';
+    const artifactLower = artifactUrl.toLowerCase();
+    if (artifactLower.endsWith('.pdf')) {
+      return 'pdf';
+    } else if (artifactLower.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/)) {
+      return 'image';
+    } else if (artifactLower.match(/\.(doc|docx)$/)) {
+      return 'doc';
+    } else if (artifactLower.match(/\.(xls|xlsx)$/)) {
+      return 'xlsx';
+    }
     
-    return JSON.stringify(currentSorted) !== JSON.stringify(initialSorted);
-  }, [rectangles]);
-
-  const hasChanges = rectanglesChanged();
-
-  const pushHistory = () => {
-    setUndoStack((prev) => [...prev, rectangles]);
-    setRedoStack([]); // clear redo when new action happens
+    return 'image'; // default to image
   };
 
-  const handleUndo = () => {
-    if (undoStack.length > 0) {
-      const newUndo = [...undoStack];
-      const previousState = newUndo.pop();
-      setRedoStack((prev) => [...prev, rectangles]);
-      setUndoStack(newUndo);
-      setRectangles(previousState);
-    }
-  };
-
-  const handleRedo = () => {
-    if (redoStack.length > 0) {
-      const newRedo = [...redoStack];
-      const nextState = newRedo.pop();
-      setUndoStack((prev) => [...prev, rectangles]);
-      setRedoStack(newRedo);
-      setRectangles(nextState);
-    }
-  };
-
-  // ----- DRAWING -----
-  const handleMouseDown = (e) => {
-    if (!isDrawing) return;
-    const stage = e.target.getStage();
-    const pointer = stage.getPointerPosition();
-    const transform = stage.getAbsoluteTransform().copy().invert();
-    const pos = transform.point(pointer);
-
-    setNewRect({
-      x: pos.x,
-      y: pos.y,
-      width: 0,
-      height: 0,
-      id: `rect${rectangles.length + 1}`,
-      label: "",
-      color: boxColor,
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDrawing || !newRect) return;
-    const stage = e.target.getStage();
-    const pointer = stage.getPointerPosition();
-    const transform = stage.getAbsoluteTransform().copy().invert();
-    const pos = transform.point(pointer);
-
-    const width = pos.x - newRect.x;
-    const height = pos.y - newRect.y;
-    setNewRect({ ...newRect, width, height });
-  };
-
-  const handleMouseUp = () => {
-    if (newRect && Math.abs(newRect.width) > 10 && Math.abs(newRect.height) > 10) {
-      const label = window.prompt("Enter label:", "");
-      if (label) {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.font = 'bold 11px Arial';
-        const textWidth = ctx.measureText(label).width;
-        const padding = 6; // Padding around text
-        const labelWidth = textWidth + padding * 2;
-        const labelHeight = 16; // Fixed height for label
-        
-      const centerY = newRect.y + newRect.height / 2;
-      const rightX = newRect.x + newRect.width + 10;
-
-      const rect = {
-        ...newRect,
-          label: label,
-        badgeX: rightX,
-        badgeY: centerY,
-          labelWidth: labelWidth,
-          labelHeight: labelHeight,
-      };
-      pushHistory(); // Save current state before making changes
-      const nextRects = [...rectangles, rect];
-      setRectangles(nextRects);
-      }
-    }
-    setNewRect(null);
-  };
-
-  // ----- ZOOM -----
-  const handleWheel = (e) => {
-    e.evt.preventDefault();
-    const stage = stageRef.current;
-    if (!stage) return;
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-
-    const scaleBy = 1.05;
-    const direction = e.evt.deltaY > 0 ? -1 : 1;
-    const newScale = Math.max(0.1, Math.min(5, direction > 0 ? oldScale * scaleBy : oldScale / scaleBy));
-
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    };
-
-    stage.scale({ x: newScale, y: newScale });
-
-    const newPos = {
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    };
-
-    stage.position(newPos);
-    stage.batchDraw();
-    setScale(newScale);
-    setStagePosition(newPos);
-  };
+  const fileType = getFileType();
+  const documentUrl = getDocumentUrl();
 
   // ----- DOWNLOAD -----
   // const handleDownload = () => {
@@ -399,8 +187,8 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     });
   };
 
-  const handleSave = async () => {
-    if (!stageRef.current || !testExecution || !documentData || !konvaImage) {
+  const handleEditorSave = async (blob, rectangles, mimeType = 'image/png') => {
+    if (!testExecution || !documentData) {
       Swal.fire({
         icon: 'warning',
         title: 'Validation Error',
@@ -438,105 +226,16 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         return;
       }
 
-      const originalWidth = konvaImage.width;
-      const originalHeight = konvaImage.height;
-
-      const currentStage = stageRef.current;
-      const imageLayer = currentStage.findOne('Image');
-      if (!imageLayer) {
-        throw new Error('Could not find image layer');
-      }
-
-      const displayedImageWidth = imageLayer.width();
-      const displayedImageHeight = imageLayer.height();
-      
-      const scaleX = originalWidth / displayedImageWidth;
-      const scaleY = originalHeight / displayedImageHeight;
-
-      const tempStage = new window.Konva.Stage({
-        container: document.createElement('div'),
-        width: originalWidth,
-        height: originalHeight,
-      });
-
-      const tempLayer = new window.Konva.Layer();
-      tempStage.add(tempLayer);
-
-      // Add original image at full size
-      const tempImage = new window.Konva.Image({
-        image: konvaImage,
-        width: originalWidth,
-        height: originalHeight,
-      });
-      tempLayer.add(tempImage);
-
-      rectangles.forEach((rect) => {
-        const origX = rect.x * scaleX;
-        const origY = rect.y * scaleY;
-        const origWidth = rect.width * scaleX;
-        const origHeight = rect.height * scaleY;
-
-        const tempRect = new window.Konva.Rect({
-          x: origX,
-          y: origY,
-          width: origWidth,
-          height: origHeight,
-          stroke: rect.color,
-          strokeWidth: 2 * scaleX, // Scale stroke width proportionally
-        });
-        tempLayer.add(tempRect);
-
-        if (rect.label) {
-          const labelOrigX = rect.badgeX * scaleX;
-          const labelOrigY = rect.badgeY * scaleY;
-          const labelWidth = (rect.labelWidth || 40) * scaleX;
-          const labelHeight = (rect.labelHeight || 16) * scaleY;
-
-          const labelBg = new window.Konva.Rect({
-            x: labelOrigX,
-            y: labelOrigY - labelHeight / 2,
-            width: labelWidth,
-            height: labelHeight,
-            fill: rect.color,
-            cornerRadius: 3 * scaleX,
-            stroke: 'white',
-            strokeWidth: 1 * scaleX,
-          });
-          tempLayer.add(labelBg);
-
-          // Add label text
-          const labelText = new window.Konva.Text({
-            x: labelOrigX,
-            y: labelOrigY - labelHeight / 2 + 2 * scaleX,
-            text: rect.label,
-            fontSize: 11 * scaleX,
-            fill: textColor,
-            fontStyle: 'bold',
-            align: 'center',
-            width: labelWidth,
-            verticalAlign: 'middle',
-            height: labelHeight,
-          });
-          tempLayer.add(labelText);
-        }
-      });
-
-      const dataURL = tempStage.toDataURL({ 
-        pixelRatio: 1, 
-        mimeType: 'image/png',
-        quality: 1
-      });
-
-      tempStage.destroy();
-
-      const response = await fetch(dataURL);
-      const blob = await response.blob();
+      const timestamp = Date.now();
+      const fileExtension = mimeType === 'application/pdf' ? 'pdf' : 'png';
+      const filename = `${String(controlId).trim()}-${timestamp}.${fileExtension}`;
 
       const formData = new FormData();
-      formData.append('image', blob, 'annotated-image.png');
+      // Use 'image' field name for both images and PDFs (backend accepts both)
+      formData.append('image', blob, filename);
       formData.append('test_execution_id', testExecution.test_execution_id);
       formData.append('evidence_document_id', documentData.document_id);
-      formData.append('control_id', String(controlId)); // Ensure it's a string
+      formData.append('control_id', String(controlId));
 
       await api.post('/data/save-annotated-image', formData, {
         headers: {
@@ -544,25 +243,156 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         }
       });
 
-      initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
+      setEditorHasChanges(false);
 
+      const fileTypeFromMime = mimeType === 'application/pdf' ? 'pdf' : 'image';
       Swal.fire({
         icon: 'success',
         title: 'Success!',
-        text: 'Image saved successfully!',
+        text: fileTypeFromMime === 'pdf' ? 'PDF with annotations saved successfully!' : 'Image with annotations saved successfully!',
         confirmButtonColor: '#286070'
       });
+      
+      // Reset editor changes
+      if (editorRef.current) {
+        editorRef.current = null;
+      }
       onHide();
     } catch (error) {
-      console.error('Error saving image:', error);
+      console.error('Error saving file:', error);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Failed to save image. Please try again.',
+        text: error.response?.data?.message || 'Failed to save file. Please try again.',
         confirmButtonColor: '#286070'
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    // If it's a doc/xlsx file and a file is uploaded, save the uploaded file
+    if ((fileType === 'doc' || fileType === 'xlsx') && uploadedFile) {
+      await handleDocXlsxSave();
+    } else if (editorRef.current && editorRef.current.handleSave) {
+      editorRef.current.handleSave();
+    }
+  };
+
+  const handleDocXlsxSave = async () => {
+    if (!testExecution || !documentData || !uploadedFile) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Unable to save: Missing required data.',
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let controlId = '';
+      
+      if (testExecution && testExecution.control_id) {
+        controlId = String(testExecution.control_id).trim();
+      }
+      
+      if (!controlId && rcmDetails && rcmDetails.control_id) {
+        controlId = String(rcmDetails.control_id).trim();
+      }
+      
+      if (!controlId && testExecution && testExecution.rcm_details && testExecution.rcm_details.control_id) {
+        controlId = String(testExecution.rcm_details.control_id).trim();
+      }
+      
+      if (!controlId || controlId === '' || controlId === 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Unable to save: Control ID not found. Please check the test execution data.',
+          confirmButtonColor: '#286070'
+        });
+        console.error('Control ID missing. testExecution:', testExecution, 'rcmDetails:', rcmDetails);
+        setLoading(false);
+        return;
+      }
+
+      const timestamp = Date.now();
+      const fileExtension = uploadedFile.name.toLowerCase().split('.').pop() || (fileType === 'doc' ? 'doc' : 'xlsx');
+      const filename = `${String(controlId).trim()}-${timestamp}.${fileExtension}`;
+
+      const formData = new FormData();
+      formData.append('image', uploadedFile, filename);
+      formData.append('test_execution_id', testExecution.test_execution_id);
+      formData.append('evidence_document_id', documentData.document_id);
+      formData.append('control_id', String(controlId));
+
+      await api.post('/data/save-annotated-image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setEditorHasChanges(false);
+      setUploadedFile(null);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'File uploaded and saved successfully!',
+        confirmButtonColor: '#286070'
+      });
+      
+      onHide();
+    } catch (error) {
+      console.error('Error saving file:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to save file. Please try again.',
+        confirmButtonColor: '#286070'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      const fileName = file.name.toLowerCase();
+      const isValidType = fileName.endsWith('.doc') || 
+                         fileName.endsWith('.docx') || 
+                         fileName.endsWith('.xls') || 
+                         fileName.endsWith('.xlsx');
+      
+      if (!isValidType) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid File Type',
+          text: 'Please upload a .doc, .docx, .xls, or .xlsx file.',
+          confirmButtonColor: '#286070'
+        });
+        return;
+      }
+      
+      setUploadedFile(file);
+      setEditorHasChanges(true);
+    }
+  };
+
+  const handleDownload = () => {
+    const url = getDocumentUrl();
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = documentData.document_name || `document.${fileType === 'doc' ? 'doc' : 'xlsx'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -573,6 +403,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     });
     setIsSidebarCollapsed(false);
     setEditedTestResults(null);
+    setEditorHasChanges(false);
+    setUploadedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     onHide();
   };
 
@@ -631,8 +466,37 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         updated_result: editedTestResults
       });
 
-      // Update local state
-      setTestResults(JSON.parse(JSON.stringify(editedTestResults)));
+      // Refresh the data from the backend to get updated status
+      const refreshResponse = await checkTestExecutionEvidence(
+        testExecution.test_execution_id,
+        documentData.document_id
+      );
+
+      if (refreshResponse.data.exists) {
+        const updatedData = refreshResponse.data.data;
+        let parsedResult = null;
+        try {
+          if (typeof updatedData.result === 'string') {
+            parsedResult = JSON.parse(updatedData.result);
+          } else {
+            parsedResult = updatedData.result;
+          }
+        } catch (parseError) {
+          console.error('Error parsing result JSON:', parseError);
+        }
+
+        // Update both testResults and editedTestResults with fresh data
+        if (parsedResult) {
+          setTestResults(parsedResult);
+          setEditedTestResults(JSON.parse(JSON.stringify(parsedResult)));
+        } else {
+          // Fallback: use edited results
+          setTestResults(JSON.parse(JSON.stringify(editedTestResults)));
+        }
+      } else {
+        // Fallback: use edited results
+        setTestResults(JSON.parse(JSON.stringify(editedTestResults)));
+      }
 
       Swal.fire({
         icon: 'success',
@@ -814,19 +678,19 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                             {editedTestResults.attributes_results.map((attr, index) => {
                               const displayResult = attr.attribute_final_result !== undefined ? attr.attribute_final_result : attr.result;
                               return (
-                                <div key={index} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '0.25rem' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                                    <strong style={{ fontSize: '0.9rem' }}>{attr.attribute_name || 'N/A'}</strong>
+                              <div key={index} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '0.25rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                  <strong style={{ fontSize: '0.9rem' }}>{attr.attribute_name || 'N/A'}</strong>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                      <span style={{ 
-                                        fontSize: '0.8rem', 
-                                        padding: '0.25rem 0.5rem', 
-                                        borderRadius: '0.25rem',
+                                  <span style={{ 
+                                    fontSize: '0.8rem', 
+                                    padding: '0.25rem 0.5rem', 
+                                    borderRadius: '0.25rem',
                                         backgroundColor: displayResult ? '#d4edda' : '#f8d7da',
                                         color: displayResult ? '#155724' : '#721c24'
-                                      }}>
+                                  }}>
                                         {displayResult ? 'Pass' : 'Fail'}
-                                      </span>
+                                  </span>
                                       {!isTestExecutionCompleted && (
                                         <select
                                           value={attr.attribute_final_result !== undefined ? (attr.attribute_final_result ? 'true' : 'false') : (attr.result ? 'true' : 'false')}
@@ -844,23 +708,23 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                         </select>
                                       )}
                                     </div>
-                                  </div>
-                                  {attr.attribute_description && (
-                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
-                                      {attr.attribute_description}
-                                    </p>
-                                  )}
-                                  {attr.test_steps && (
-                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
-                                      <strong>Test Steps:</strong> {attr.test_steps}
-                                    </p>
-                                  )}
-                                  {attr.reason && (
-                                    <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d', fontStyle: 'italic' }}>
-                                      {attr.reason}
-                                    </p>
-                                  )}
                                 </div>
+                                {attr.attribute_description && (
+                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
+                                    {attr.attribute_description}
+                                  </p>
+                                )}
+                                {attr.test_steps && (
+                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d' }}>
+                                    <strong>Test Steps:</strong> {attr.test_steps}
+                                  </p>
+                                )}
+                                {attr.reason && (
+                                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#6c757d', fontStyle: 'italic' }}>
+                                    {attr.reason}
+                                  </p>
+                                )}
+                              </div>
                               );
                             })}
                             {editedTestResults.summary && (
@@ -963,7 +827,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
             ></i>
           </div>
 
-          {/* Right Column - Image with Drawing Canvas */}
+          {/* Right Column - Document Editor (Image or PDF) */}
           <div
             style={{ 
               backgroundColor: 'white',
@@ -978,219 +842,85 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
               position: 'relative'
             }}
           >
-            {documentData && (documentData.display_artifact_url || (existingTestResult && existingTestResult.result_artifact_url)) ? (
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-                {/* Drawing Controls */}
+            {documentUrl ? (
+              fileType === 'pdf' ? (
+                <PDFEditor
+                  ref={editorRef}
+                  pdfUrl={documentUrl}
+                  onSave={handleEditorSave}
+                  onCancel={handleCancel}
+                  loading={loading}
+                  onChanges={setEditorHasChanges}
+                />
+              ) : fileType === 'doc' || fileType === 'xlsx' ? (
                 <div style={{ 
-                  padding: '0.5rem', 
-                  borderBottom: '1px solid #dee2e6', 
-                  backgroundColor: '#f8f9fa',
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '0.5rem'
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  height: '100%',
+                  padding: '2rem',
+                  gap: '2rem'
                 }}>
-                  <button
-                    onClick={() => setIsDrawing(!isDrawing)}
-                    style={{ 
-                      background: isDrawing ? "#b2f5ea" : "white",
-                      cursor: "pointer",
-                      padding: '0.375rem 0.75rem',
-                      border: '1px solid #dee2e6', 
-                      borderRadius: '0.25rem',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    {isDrawing ? "Drawing: ON" : "Drawing: OFF"}
-                  </button>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-                    Box:
-                    <input
-                      type="color"
-                      value={boxColor}
-                      onChange={(e) => setBoxColor(e.target.value)}
-                      style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-                    />
-                  </label>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-                    Text:
-                    <input
-                      type="color"
-                      value={textColor}
-                      onChange={(e) => setTextColor(e.target.value)}
-                      style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-                    />
-                  </label>
-
-                  <button
-                    onClick={handleUndo}
-                    disabled={undoStack.length === 0}
-                    style={{
-                      background: undoStack.length === 0 ? "#ddd" : "#f1c40f",
-                      padding: "0.375rem 0.75rem",
-                      border: "none",
-                      borderRadius: "0.25rem",
-                      cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    ↩️ Undo
-                  </button>
-
-                  <button
-                    onClick={handleRedo}
-                    disabled={redoStack.length === 0}
-                    style={{
-                      background: redoStack.length === 0 ? "#ddd" : "#3498db",
-                      color: redoStack.length === 0 ? "#999" : "white",
-                      padding: "0.375rem 0.75rem",
-                      border: "none",
-                      borderRadius: "0.25rem",
-                      cursor: redoStack.length === 0 ? "not-allowed" : "pointer",
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    ↪️ Redo
-                  </button>
-
-                  <button
-                    onClick={fitImageToScreen}
-                    style={{
-                      background: "#6c757d",
-                      color: "white",
-                      border: "none",
-                      padding: "0.375rem 0.75rem",
-                      cursor: "pointer",
-                      borderRadius: "0.25rem",
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    🔍 Fit to Screen
-                  </button>
-
-                  {/* <button
-                    onClick={handleDownload}
-                    style={{
-                      background: "#4CAF50",
-                      color: "white",
-                      border: "none",
-                      padding: "0.375rem 0.75rem",
-                      cursor: "pointer",
-                      borderRadius: "0.25rem",
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    ⬇️ Download
-                  </button> */}
-                </div>
-
-                {/* Konva Canvas */}
-                <div 
-                  ref={canvasContainerRef}
-                  style={{ 
-                    flex: 1, 
-                    display: 'flex', 
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    position: 'relative'
-                  }}
-                >
-                  {konvaImage ? (
-                    <Stage
-                      width={canvasSize.width}
-                      height={canvasSize.height}
-                      style={{ border: "1px solid #ccc", background: "#fff" }}
-                      ref={stageRef}
-                      onWheel={handleWheel}
-                      onMouseDown={handleMouseDown}
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                    >
-                      <Layer>
-                        <KonvaImageComp 
-                          image={konvaImage} 
-                          width={konvaImage.width} 
-                          height={konvaImage.height} 
-                        />
-
-                        {rectangles.map((rect) => (
-                          <React.Fragment key={rect.id}>
-                            <Rect
-                              x={rect.x}
-                              y={rect.y}
-                              width={rect.width}
-                              height={rect.height}
-                              stroke={rect.color}
-                              strokeWidth={2}
-                            />
-                            {rect.label && (
-                              <>
-                                <Rect
-                                  x={rect.badgeX}
-                                  y={rect.badgeY - (rect.labelHeight || 16) / 2}
-                                  width={rect.labelWidth || 40}
-                                  height={rect.labelHeight || 16}
-                                  fill={rect.color}
-                                  cornerRadius={3}
-                                  stroke="white"
-                                  strokeWidth={1}
-                                />
-                                <Text
-                                  x={rect.badgeX}
-                                  y={rect.badgeY - (rect.labelHeight || 16) / 2 + 2}
-                                  text={rect.label}
-                                  fontSize={11}
-                                  fill={textColor}
-                                  fontStyle="bold"
-                                  align="center"
-                                  width={rect.labelWidth || 40}
-                                  verticalAlign="middle"
-                                  height={rect.labelHeight || 16}
-                                />
-                              </>
-                            )}
-                          </React.Fragment>
-                        ))}
-
-                        {newRect && (
-                          <Rect
-                            x={newRect.x}
-                            y={newRect.y}
-                            width={newRect.width}
-                            height={newRect.height}
-                            stroke={boxColor}
-                            dash={[4, 4]}
-                            strokeWidth={2}
-                          />
-                        )}
-                      </Layer>
-                    </Stage>
-                  ) : (
-                    <div style={{ textAlign: 'center', color: '#6c757d', padding: '2rem' }}>
-                      <i className="fas fa-spinner fa-spin" style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}></i>
-                      <p>Loading image...</p>
-                      {documentData.artifact_url && (
-                    <a 
-                      href={documentData.artifact_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn btn-primary"
-                          style={{ marginTop: '1rem' }}
-                    >
-                      Open Document
-                    </a>
-                      )}
+                  <div style={{ textAlign: 'center' }}>
+                    <i className={`fas fa-file-${fileType === 'doc' ? 'word' : 'excel'}`} style={{ fontSize: '4rem', marginBottom: '1rem', color: '#286070' }}></i>
+                    <h5 style={{ marginBottom: '0.5rem' }}>
+                      {documentData.document_name || `Document.${fileType === 'doc' ? 'doc' : 'xlsx'}`}
+                    </h5>
+                    <p style={{ color: '#6c757d', marginBottom: '1.5rem' }}>
+                      {fileType === 'doc' ? 'Word Document' : 'Excel Spreadsheet'}
+                    </p>
                   </div>
-                  )}
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: '400px' }}>
+                    <Button 
+                      variant="outline-primary" 
+                      onClick={handleDownload}
+                      style={{ width: '100%' }}
+                    >
+                      <i className="fas fa-download" style={{ marginRight: '0.5rem' }}></i>
+                      Download File
+                    </Button>
+                    
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={fileType === 'doc' ? '.doc,.docx' : '.xls,.xlsx'}
+                        onChange={handleFileUpload}
+                        style={{ display: 'none' }}
+                      />
+                      <Button 
+                        variant="primary" 
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{ width: '100%' }}
+                      >
+                        <i className="fas fa-upload" style={{ marginRight: '0.5rem' }}></i>
+                        {uploadedFile ? `Replace File (${uploadedFile.name})` : 'Upload New File'}
+                      </Button>
+                      {uploadedFile && (
+                        <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745', textAlign: 'center' }}>
+                          <i className="fas fa-check-circle" style={{ marginRight: '0.25rem' }}></i>
+                          {uploadedFile.name} selected
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <ImageEditor
+                  ref={editorRef}
+                  imageUrl={documentUrl}
+                  onSave={handleEditorSave}
+                  onCancel={handleCancel}
+                  loading={loading}
+                  onChanges={setEditorHasChanges}
+                />
+              )
             ) : (
               <div style={{ textAlign: 'center', color: '#6c757d', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <div>
-                <i className="fas fa-image" style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}></i>
+                  <i className="fas fa-file" style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}></i>
                 <p>No document available</p>
                 </div>
               </div>
@@ -1203,7 +933,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         <Button variant="secondary" onClick={handleCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSave} disabled={loading || !hasChanges}>
+        <Button 
+          variant="primary" 
+          onClick={handleSave} 
+          disabled={loading || (editorHasChanges === false && !((fileType === 'doc' || fileType === 'xlsx') && uploadedFile))}
+        >
           {loading ? 'Saving...' : 'Save'}
         </Button>
       </Modal.Footer>
