@@ -16,6 +16,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
   const [savingResults, setSavingResults] = useState(false);
   const processedRef = useRef(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isRightDivCollapsed, setIsRightDivCollapsed] = useState(false);
   
   const [editorHasChanges, setEditorHasChanges] = useState(false);
   const editorRef = useRef(null);
@@ -402,6 +403,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       testResults: false
     });
     setIsSidebarCollapsed(false);
+    setIsRightDivCollapsed(false);
     setEditedTestResults(null);
     setEditorHasChanges(false);
     setUploadedFile(null);
@@ -599,15 +601,15 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
           {/* Left Sidebar */}
           <div
             style={{ 
-              borderRight: isSidebarCollapsed ? 'none' : '1px solid #dee2e6', 
+              borderRight: (isSidebarCollapsed || isRightDivCollapsed) ? 'none' : '1px solid #dee2e6', 
               backgroundColor: '#f8f9fa',
               overflowY: 'auto',
               height: '100%',
               transition: 'all 0.3s ease-in-out',
               padding: 0,
-              width: isSidebarCollapsed ? '0' : '25%',
-              minWidth: isSidebarCollapsed ? '0' : '25%',
-              maxWidth: isSidebarCollapsed ? '0' : '25%',
+              width: isRightDivCollapsed ? '100%' : (isSidebarCollapsed ? '0' : '25%'),
+              minWidth: isRightDivCollapsed ? '100%' : (isSidebarCollapsed ? '0' : '25%'),
+              maxWidth: isRightDivCollapsed ? '100%' : (isSidebarCollapsed ? '0' : '25%'),
               flexShrink: 0,
               opacity: isSidebarCollapsed ? 0 : 1,
               overflow: isSidebarCollapsed ? 'hidden' : 'auto',
@@ -790,41 +792,93 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
             </div>
           </div>
 
-          {/* Toggle Button - Small Round Arrow in the Middle */}
+          {/* Toggle Buttons Container - Both icons stacked vertically in the middle */}
           <div
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             style={{
               position: 'absolute',
-              left: isSidebarCollapsed ? '0' : 'calc(25% - 15px)',
+              left: isRightDivCollapsed ? 'calc(100% - 45px)' : (isSidebarCollapsed ? '15px' : 'calc(25% - 15px)'),
               top: '50%',
               transform: 'translateY(-50%)',
               zIndex: 1000,
-              backgroundColor: '#fff',
-              border: '1px solid #dee2e6',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              width: '30px',
-              height: '30px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              transition: 'all 0.3s ease-in-out',
-              hover: {
-                backgroundColor: '#f8f9fa'
-              }
+              flexDirection: 'column',
+              gap: '0.5rem',
+              alignItems: 'center'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-            title={isSidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
           >
-            <i
-              className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'}`}
-              style={{
-                fontSize: '0.75rem',
-                color: '#495057'
+            {/* Toggle Button for Left Sidebar - Top Icon */}
+            <div
+              onClick={() => {
+                setIsSidebarCollapsed(!isSidebarCollapsed);
+                if (!isSidebarCollapsed) {
+                  setIsRightDivCollapsed(false); // Reset right div when collapsing left
+                }
               }}
-            ></i>
+              style={{
+                backgroundColor: '#fff',
+                border: '1px solid #dee2e6',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                width: '30px',
+                height: '30px',
+                display: isRightDivCollapsed ? 'none' : 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s ease-in-out',
+                hover: {
+                  backgroundColor: '#f8f9fa'
+                }
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+              title={isSidebarCollapsed ? 'Show evidence details' : 'Hide evidence details and expand Evidence Editor'}
+            >
+              <i
+                className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'}`}
+                style={{
+                  fontSize: '0.75rem',
+                  color: '#495057'
+                }}
+              ></i>
+            </div>
+
+            {/* Toggle Button for Right Div - Bottom Icon */}
+            <div
+              onClick={() => {
+                setIsRightDivCollapsed(!isRightDivCollapsed);
+                if (!isRightDivCollapsed) {
+                  setIsSidebarCollapsed(false); // Reset left sidebar when collapsing right
+                }
+              }}
+              style={{
+                backgroundColor: '#fff',
+                border: '1px solid #dee2e6',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                width: '30px',
+                height: '30px',
+                display: isSidebarCollapsed ? 'none' : 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s ease-in-out',
+                hover: {
+                  backgroundColor: '#f8f9fa'
+                }
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+              title={isRightDivCollapsed ? 'Show Evidence Editor' : 'Hide Evidence Editor and expand Evidence Details'}
+            >
+              <i
+                className={`fas fa-chevron-${isRightDivCollapsed ? 'left' : 'right'}`}
+                style={{
+                  fontSize: '0.75rem',
+                  color: '#495057'
+                }}
+              ></i>
+            </div>
           </div>
 
           {/* Right Column - Document Editor (Image or PDF) */}
@@ -839,7 +893,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
               transition: 'all 0.3s ease-in-out',
               flex: '1 1 0',
               minWidth: 0,
-              position: 'relative'
+              position: 'relative',
+              width: isSidebarCollapsed ? '100%' : (isRightDivCollapsed ? '0' : '75%'),
+              opacity: isRightDivCollapsed ? 0 : 1,
+              overflow: isRightDivCollapsed ? 'hidden' : 'auto',
+              visibility: isRightDivCollapsed ? 'hidden' : 'visible'
             }}
           >
             {documentUrl ? (
