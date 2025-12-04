@@ -699,7 +699,7 @@ const TestExecutionDetails = () => {
                                 variant="outline-primary" 
                                 size="sm"
                                 onClick={() => handleMarkEvidenceFile(doc)}
-                                disabled={processingDocumentId !== null || testExecution.status === 'completed'}
+                                disabled={processingDocumentId !== null}
                               >
                                 {processingDocumentId === doc.document_id ? (
                                   <>

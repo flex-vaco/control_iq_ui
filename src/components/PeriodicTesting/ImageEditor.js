@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle } from 'react';
 import { Stage, Layer, Rect, Text, Image as KonvaImageComp } from 'react-konva';
 
-const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onChanges }, ref) => {
+const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onChanges, readOnly = false }, ref) => {
   const [rectangles, setRectangles] = useState([]);
   const [newRect, setNewRect] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -152,7 +152,7 @@ const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onC
   };
 
   const handleMouseDown = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || readOnly) return;
     const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
     const transform = stage.getAbsoluteTransform().copy().invert();
@@ -170,7 +170,7 @@ const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onC
   };
 
   const handleMouseMove = (e) => {
-    if (!isDrawing || !newRect) return;
+    if (!isDrawing || !newRect || readOnly) return;
     const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
     const transform = stage.getAbsoluteTransform().copy().invert();
@@ -182,6 +182,10 @@ const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onC
   };
 
   const handleMouseUp = () => {
+    if (readOnly) {
+      setNewRect(null);
+      return;
+    }
     if (newRect && Math.abs(newRect.width) > 10 && Math.abs(newRect.height) > 10) {
       const label = window.prompt("Enter label:", "");
       if (label) {
@@ -362,95 +366,97 @@ const ImageEditor = React.forwardRef(({ imageUrl, onSave, onCancel, loading, onC
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Drawing Controls */}
-      <div style={{ 
-        padding: '0.5rem', 
-        borderBottom: '1px solid #dee2e6', 
-        backgroundColor: '#f8f9fa',
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '0.5rem'
-      }}>
-        <button
-          onClick={() => setIsDrawing(!isDrawing)}
-          style={{ 
-            background: isDrawing ? "#b2f5ea" : "white",
-            cursor: "pointer",
-            padding: '0.375rem 0.75rem',
-            border: '1px solid #dee2e6', 
-            borderRadius: '0.25rem',
-            fontSize: '0.875rem'
-          }}
-        >
-          {isDrawing ? "Drawing: ON" : "Drawing: OFF"}
-        </button>
+      {!readOnly && (
+        <div style={{ 
+          padding: '0.5rem', 
+          borderBottom: '1px solid #dee2e6', 
+          backgroundColor: '#f8f9fa',
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.5rem'
+        }}>
+          <button
+            onClick={() => setIsDrawing(!isDrawing)}
+            style={{ 
+              background: isDrawing ? "#b2f5ea" : "white",
+              cursor: "pointer",
+              padding: '0.375rem 0.75rem',
+              border: '1px solid #dee2e6', 
+              borderRadius: '0.25rem',
+              fontSize: '0.875rem'
+            }}
+          >
+            {isDrawing ? "Drawing: ON" : "Drawing: OFF"}
+          </button>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-          Box:
-          <input
-            type="color"
-            value={boxColor}
-            onChange={(e) => setBoxColor(e.target.value)}
-            style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-          />
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
+            Box:
+            <input
+              type="color"
+              value={boxColor}
+              onChange={(e) => setBoxColor(e.target.value)}
+              style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
+            />
+          </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-          Text:
-          <input
-            type="color"
-            value={textColor}
-            onChange={(e) => setTextColor(e.target.value)}
-            style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-          />
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
+            Text:
+            <input
+              type="color"
+              value={textColor}
+              onChange={(e) => setTextColor(e.target.value)}
+              style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
+            />
+          </label>
 
-        <button
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          style={{
-            background: undoStack.length === 0 ? "#ddd" : "#f1c40f",
-            padding: "0.375rem 0.75rem",
-            border: "none",
-            borderRadius: "0.25rem",
-            cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
-            fontSize: '0.875rem'
-          }}
-        >
-          ↩️ Undo
-        </button>
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            style={{
+              background: undoStack.length === 0 ? "#ddd" : "#f1c40f",
+              padding: "0.375rem 0.75rem",
+              border: "none",
+              borderRadius: "0.25rem",
+              cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
+              fontSize: '0.875rem'
+            }}
+          >
+            ↩️ Undo
+          </button>
 
-        <button
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          style={{
-            background: redoStack.length === 0 ? "#ddd" : "#3498db",
-            color: redoStack.length === 0 ? "#999" : "white",
-            padding: "0.375rem 0.75rem",
-            border: "none",
-            borderRadius: "0.25rem",
-            cursor: redoStack.length === 0 ? "not-allowed" : "pointer",
-            fontSize: '0.875rem'
-          }}
-        >
-          ↪️ Redo
-        </button>
+          <button
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            style={{
+              background: redoStack.length === 0 ? "#ddd" : "#3498db",
+              color: redoStack.length === 0 ? "#999" : "white",
+              padding: "0.375rem 0.75rem",
+              border: "none",
+              borderRadius: "0.25rem",
+              cursor: redoStack.length === 0 ? "not-allowed" : "pointer",
+              fontSize: '0.875rem'
+            }}
+          >
+            ↪️ Redo
+          </button>
 
-        <button
-          onClick={fitImageToScreen}
-          style={{
-            background: "#6c757d",
-            color: "white",
-            border: "none",
-            padding: "0.375rem 0.75rem",
-            cursor: "pointer",
-            borderRadius: "0.25rem",
-            fontSize: '0.875rem'
-          }}
-        >
-          🔍 Fit to Screen
-        </button>
-      </div>
+          <button
+            onClick={fitImageToScreen}
+            style={{
+              background: "#6c757d",
+              color: "white",
+              border: "none",
+              padding: "0.375rem 0.75rem",
+              cursor: "pointer",
+              borderRadius: "0.25rem",
+              fontSize: '0.875rem'
+            }}
+          >
+            🔍 Fit to Screen
+          </button>
+        </div>
+      )}
 
       {/* Konva Canvas */}
       <div 

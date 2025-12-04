@@ -909,6 +909,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                   onCancel={handleCancel}
                   loading={loading}
                   onChanges={setEditorHasChanges}
+                  readOnly={isTestExecutionCompleted}
                 />
               ) : fileType === 'doc' || fileType === 'xlsx' ? (
                 <div style={{ 
@@ -940,29 +941,31 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                       Download File
                     </Button>
                     
-                    <div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept={fileType === 'doc' ? '.doc,.docx' : '.xls,.xlsx'}
-                        onChange={handleFileUpload}
-                        style={{ display: 'none' }}
-                      />
-                      <Button 
-                        variant="primary" 
-                        onClick={() => fileInputRef.current?.click()}
-                        style={{ width: '100%' }}
-                      >
-                        <i className="fas fa-upload" style={{ marginRight: '0.5rem' }}></i>
-                        {uploadedFile ? `Replace File (${uploadedFile.name})` : 'Upload New File'}
-                      </Button>
-                      {uploadedFile && (
-                        <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745', textAlign: 'center' }}>
-                          <i className="fas fa-check-circle" style={{ marginRight: '0.25rem' }}></i>
-                          {uploadedFile.name} selected
-                        </p>
-                      )}
-                    </div>
+                    {!isTestExecutionCompleted && (
+                      <div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept={fileType === 'doc' ? '.doc,.docx' : '.xls,.xlsx'}
+                          onChange={handleFileUpload}
+                          style={{ display: 'none' }}
+                        />
+                        <Button 
+                          variant="primary" 
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{ width: '100%' }}
+                        >
+                          <i className="fas fa-upload" style={{ marginRight: '0.5rem' }}></i>
+                          {uploadedFile ? `Replace File (${uploadedFile.name})` : 'Upload New File'}
+                        </Button>
+                        {uploadedFile && (
+                          <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745', textAlign: 'center' }}>
+                            <i className="fas fa-check-circle" style={{ marginRight: '0.25rem' }}></i>
+                            {uploadedFile.name} selected
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -973,6 +976,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                   onCancel={handleCancel}
                   loading={loading}
                   onChanges={setEditorHasChanges}
+                  readOnly={isTestExecutionCompleted}
                 />
               )
             ) : (
@@ -994,7 +998,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         <Button 
           variant="primary" 
           onClick={handleSave} 
-          disabled={loading || (editorHasChanges === false && !((fileType === 'doc' || fileType === 'xlsx') && uploadedFile))}
+          disabled={loading || isTestExecutionCompleted || (editorHasChanges === false && !((fileType === 'doc' || fileType === 'xlsx') && uploadedFile))}
         >
           {loading ? 'Saving...' : 'Save'}
         </Button>

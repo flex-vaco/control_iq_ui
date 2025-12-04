@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useImperativeHandle } 
 import { Stage, Layer, Rect, Text } from 'react-konva';
 import { PDFDocument, rgb } from 'pdf-lib';
 
-const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChanges }, ref) => {
+const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChanges, readOnly = false }, ref) => {
   const [rectangles, setRectangles] = useState([]);
   const [newRect, setNewRect] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -99,7 +99,7 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   };
 
   const handleMouseDown = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || readOnly) return;
     const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
     const transform = stage.getAbsoluteTransform().copy().invert();
@@ -117,7 +117,7 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   };
 
   const handleMouseMove = (e) => {
-    if (!isDrawing || !newRect) return;
+    if (!isDrawing || !newRect || readOnly) return;
     const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
     const transform = stage.getAbsoluteTransform().copy().invert();
@@ -129,6 +129,10 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   };
 
   const handleMouseUp = () => {
+    if (readOnly) {
+      setNewRect(null);
+      return;
+    }
     if (newRect && Math.abs(newRect.width) > 10 && Math.abs(newRect.height) > 10) {
       const label = window.prompt("Enter label:", "");
       if (label) {
@@ -464,80 +468,82 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Drawing Controls */}
-      <div style={{ 
-        padding: '0.5rem', 
-        borderBottom: '1px solid #dee2e6', 
-        backgroundColor: '#f8f9fa',
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '0.5rem'
-      }}>
-        <button
-          onClick={() => setIsDrawing(!isDrawing)}
-          style={{ 
-            background: isDrawing ? "#b2f5ea" : "white",
-            cursor: "pointer",
-            padding: '0.375rem 0.75rem',
-            border: '1px solid #dee2e6', 
-            borderRadius: '0.25rem',
-            fontSize: '0.875rem'
-          }}
-        >
-          {isDrawing ? "Drawing: ON" : "Drawing: OFF"}
-        </button>
+      {!readOnly && (
+        <div style={{ 
+          padding: '0.5rem', 
+          borderBottom: '1px solid #dee2e6', 
+          backgroundColor: '#f8f9fa',
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.5rem'
+        }}>
+          <button
+            onClick={() => setIsDrawing(!isDrawing)}
+            style={{ 
+              background: isDrawing ? "#b2f5ea" : "white",
+              cursor: "pointer",
+              padding: '0.375rem 0.75rem',
+              border: '1px solid #dee2e6', 
+              borderRadius: '0.25rem',
+              fontSize: '0.875rem'
+            }}
+          >
+            {isDrawing ? "Drawing: ON" : "Drawing: OFF"}
+          </button>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-          Box:
-          <input
-            type="color"
-            value={boxColor}
-            onChange={(e) => setBoxColor(e.target.value)}
-            style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-          />
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
+            Box:
+            <input
+              type="color"
+              value={boxColor}
+              onChange={(e) => setBoxColor(e.target.value)}
+              style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
+            />
+          </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-          Text:
-          <input
-            type="color"
-            value={textColor}
-            onChange={(e) => setTextColor(e.target.value)}
-            style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
-          />
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
+            Text:
+            <input
+              type="color"
+              value={textColor}
+              onChange={(e) => setTextColor(e.target.value)}
+              style={{ width: '30px', height: '25px', cursor: 'pointer', border: '1px solid #dee2e6' }}
+            />
+          </label>
 
-        <button
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          style={{
-            background: undoStack.length === 0 ? "#ddd" : "#f1c40f",
-            padding: "0.375rem 0.75rem",
-            border: "none",
-            borderRadius: "0.25rem",
-            cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
-            fontSize: '0.875rem'
-          }}
-        >
-          ↩️ Undo
-        </button>
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            style={{
+              background: undoStack.length === 0 ? "#ddd" : "#f1c40f",
+              padding: "0.375rem 0.75rem",
+              border: "none",
+              borderRadius: "0.25rem",
+              cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
+              fontSize: '0.875rem'
+            }}
+          >
+            ↩️ Undo
+          </button>
 
-        <button
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          style={{
-            background: redoStack.length === 0 ? "#ddd" : "#3498db",
-            color: redoStack.length === 0 ? "#999" : "white",
-            padding: "0.375rem 0.75rem",
-            border: "none",
-            borderRadius: "0.25rem",
-            cursor: redoStack.length === 0 ? "not-allowed" : "pointer",
-            fontSize: '0.875rem'
-          }}
-        >
-          ↪️ Redo
-        </button>
-      </div>
+          <button
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            style={{
+              background: redoStack.length === 0 ? "#ddd" : "#3498db",
+              color: redoStack.length === 0 ? "#999" : "white",
+              padding: "0.375rem 0.75rem",
+              border: "none",
+              borderRadius: "0.25rem",
+              cursor: redoStack.length === 0 ? "not-allowed" : "pointer",
+              fontSize: '0.875rem'
+            }}
+          >
+            ↪️ Redo
+          </button>
+        </div>
+      )}
 
       {/* PDF Viewer with Overlay Canvas */}
       <div 
@@ -580,7 +586,7 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
                 width: '100%',
                 height: '100%',
                 zIndex: 2,
-                pointerEvents: isDrawing ? 'auto' : 'none'
+                pointerEvents: (isDrawing && !readOnly) ? 'auto' : 'none'
               }}
             >
               <Stage
