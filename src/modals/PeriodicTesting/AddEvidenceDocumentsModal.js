@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Modal, Button, Form, Alert, Spinner } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Modal, Button, Form, Alert, Spinner, ListGroup } from 'react-bootstrap';
 import { api } from '../../services/api';
 
 const AddEvidenceDocumentsModal = ({
@@ -10,12 +10,26 @@ const AddEvidenceDocumentsModal = ({
   loading = false
 }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [policyDocumentFlags, setPolicyDocumentFlags] = useState({});
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!show) {
+      setSelectedFiles([]);
+      setPolicyDocumentFlags({});
+    }
+  }, [show]);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     setSelectedFiles(files);
+    // Initialize policy flags to false for all files
+    const flags = {};
+    files.forEach((file, index) => {
+      flags[index] = false;
+    });
+    setPolicyDocumentFlags(flags);
     setError('');
   };
 
@@ -33,9 +47,12 @@ const AddEvidenceDocumentsModal = ({
     try {
       const formData = new FormData();
       
-      // Append all selected files
-      selectedFiles.forEach((file) => {
+      // Append all selected files and policy flags
+      selectedFiles.forEach((file, index) => {
         formData.append('documents', file);
+        // Append policy flag for each file
+        const isPolicy = policyDocumentFlags[index] || false;
+        formData.append('is_policy_document', isPolicy);
       });
       // eslint-disable-next-line no-unused-vars
       const response = await api.post(`/data/pbc/${evidenceId}/add-documents`, formData, {
@@ -100,12 +117,29 @@ const AddEvidenceDocumentsModal = ({
 
           {selectedFiles.length > 0 && (
             <div className="mt-3">
-              <strong>Selected Files ({selectedFiles.length}):</strong>
-              <ul className="mt-2">
+              <Form.Label className="fw-bold">Mark as Policy Document:</Form.Label>
+              <ListGroup>
                 {selectedFiles.map((file, index) => (
-                  <li key={index}>{file.name}</li>
+                  <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
+                    <span>
+                      <i className="fas fa-file me-2"></i>
+                      {file.name}
+                    </span>
+                    <Form.Check
+                      type="switch"
+                      id={`policy-doc-${index}`}
+                      checked={policyDocumentFlags[index] || false}
+                      onChange={(e) => {
+                        setPolicyDocumentFlags(prev => ({
+                          ...prev,
+                          [index]: e.target.checked
+                        }));
+                      }}
+                      label="Policy Document"
+                    />
+                  </ListGroup.Item>
                 ))}
-              </ul>
+              </ListGroup>
             </div>
           )}
         </Modal.Body>

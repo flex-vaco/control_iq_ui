@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner, Row, Col, ListGroup } from 'react-bootstrap';
 
 const PbcCreateModal = ({
@@ -21,7 +21,18 @@ const PbcCreateModal = ({
   loadingDocuments = false,
   onDeleteDocument = null
 }) => {
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [policyDocumentFlags, setPolicyDocumentFlags] = useState({});
+  
   const testingStatuses = ['Pending', 'Partial Received', 'Received'];
+  
+  // Reset when modal opens/closes
+  useEffect(() => {
+    if (!show) {
+      setSelectedFiles([]);
+      setPolicyDocumentFlags({});
+    }
+  }, [show]);
   
   // Generate year options (current year and next 5 years)
   const currentYear = new Date().getFullYear();
@@ -38,7 +49,30 @@ const PbcCreateModal = ({
       <Modal.Header closeButton>
         <Modal.Title>{mode === 'edit' ? 'Edit Evidence (PBC)' : 'Create New Evidence (PBC)'}</Modal.Title>
       </Modal.Header>
-      <Form onSubmit={onSubmit}>
+      <Form onSubmit={(e) => {
+        e.preventDefault();
+        // Build form data with policy document flags
+        const formData = new FormData();
+        formData.append('client_id', form.client_id);
+        formData.append('control_id', form.control_id);
+        formData.append('evidence_name', form.evidence_name);
+        formData.append('testing_status', form.testing_status);
+        formData.append('year', form.year);
+        formData.append('quarter', form.quarter);
+        
+        // Append files and policy flags
+        if (selectedFiles && selectedFiles.length > 0) {
+          for (let i = 0; i < selectedFiles.length; i++) {
+            formData.append('documents', selectedFiles[i]);
+            // Append policy flag for each file
+            const isPolicy = policyDocumentFlags[i] || false;
+            formData.append('is_policy_document', isPolicy);
+          }
+        }
+        
+        // Call parent's onSubmit with the event and formData
+        onSubmit(e, formData);
+      }}>
         <Modal.Body>
           <Row className="mb-3">
             <Col md={12}>
@@ -174,13 +208,52 @@ const PbcCreateModal = ({
             <Form.Label>Upload Document(s){mode === 'edit' && (<span className="italic"> - You will have to re-test the newly uploaded document(s)</span>)}</Form.Label>
             <Form.Control 
               type="file" 
-              onChange={onFileChange} 
+              onChange={(e) => {
+                const files = Array.from(e.target.files);
+                setSelectedFiles(files);
+                // Initialize policy flags to false for all files
+                const flags = {};
+                files.forEach((file, index) => {
+                  flags[index] = false;
+                });
+                setPolicyDocumentFlags(flags);
+                onFileChange(e);
+              }} 
               multiple
               disabled={loading}
             />
             <Form.Text className="text-muted">
               You can select multiple files to attach to this evidence request.
             </Form.Text>
+            
+            {/* Show checkboxes for selected files */}
+            {selectedFiles.length > 0 && (
+              <div className="mt-3">
+                <Form.Label className="fw-bold">Mark as Policy Document:</Form.Label>
+                <ListGroup>
+                  {selectedFiles.map((file, index) => (
+                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
+                      <span>
+                        <i className="fas fa-file me-2"></i>
+                        {file.name}
+                      </span>
+                      <Form.Check
+                        type="switch"
+                        id={`policy-doc-${index}`}
+                        checked={policyDocumentFlags[index] || false}
+                        onChange={(e) => {
+                          setPolicyDocumentFlags(prev => ({
+                            ...prev,
+                            [index]: e.target.checked
+                          }));
+                        }}
+                        label="Policy Document"
+                      />
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              </div>
+            )}
           </Form.Group>
 
           {mode === 'edit' && (

@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Spinner } from 'react-bootstrap';
+import { Button, Spinner, Form, Card } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { useAuth } from '../../context/AuthContext';
 import DynamicTable from '../../components/DynamicTable';
-import { getPbcData, getRcmControls, createPbcRequest, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, deleteEvidenceDocument } from '../../services/api';
+import { getPbcData, getRcmControls, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, deleteEvidenceDocument, getAllTenants } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
 
 const PBC = () => {
+  const { user: currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.roleId === 1;
   const [pbcData, setPbcData] = useState([]);
+  const [filteredPbcData, setFilteredPbcData] = useState([]);
   const [rcmControls, setRcmControls] = useState([]);
   const [loading, setLoading] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [error, setError] = useState('');
   const [clients, setClients] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenantFilter, setSelectedTenantFilter] = useState('');
   
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -50,21 +56,30 @@ const PBC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await getPbcData(clientId);
+      const tenantId = isSuperAdmin && selectedTenantFilter ? parseInt(selectedTenantFilter) : null;
+      const response = await getPbcData(clientId, tenantId);
       // Store full data for edit/delete operations
       setFullData(response.data);
       // Filter to only show the required columns in order: client, name, status, control, documents count
       // Keep evidence_id in data for edit/delete operations (but won't be displayed)
-      const filteredData = response.data.map(item => ({
-        evidence_id: item.evidence_id || null, // Keep id for edit/delete
-        control_id: item.control_id || '',
-        client_name: item.client_name || '',
-        evidence_name: item.evidence_name || '',
-        testing_status: item.testing_status || '',
-        year: item.year || '',
-        quarter: item.quarter || '',
-        document_count: item.document_count || 0
-      }));
+      const filteredData = response.data.map(item => {
+        const data = {
+          evidence_id: item.evidence_id || null, // Keep id for edit/delete
+          control_id: item.control_id || '',
+          client_name: item.client_name || '',
+          evidence_name: item.evidence_name || '',
+          testing_status: item.testing_status || '',
+          year: item.year || '',
+          quarter: item.quarter || '',
+          document_count: item.document_count || 0,
+          tenant_id: item.tenant_id || null
+        };
+        // Only include tenant_name if user is super admin
+        if (isSuperAdmin && item.tenant_name) {
+          data.tenant_name = item.tenant_name;
+        }
+        return data;
+      });
       setPbcData(filteredData);
     } catch (err) {
       // Don't show error for 401 - interceptor handles it
@@ -74,6 +89,17 @@ const PBC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTenants = async () => {
+    try {
+      const response = await getAllTenants();
+      setTenants(response.data);
+    } catch (err) {
+      if (err.response?.status !== 401) {
+        console.error('Failed to fetch tenants:', err);
+      }
     }
   };
 
@@ -95,7 +121,18 @@ const PBC = () => {
   useEffect(() => {
     fetchClients();
     fetchPbcData(); // Fetch all data by default
-  }, []);
+    if (isSuperAdmin) {
+      fetchTenants();
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (selectedTenantFilter) {
+      fetchPbcData();
+    } else if (isSuperAdmin) {
+      fetchPbcData();
+    }
+  }, [selectedTenantFilter]);
 
   // --- Form Handlers ---
 
@@ -330,7 +367,7 @@ const PBC = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, customFormData = null) => {
     e.preventDefault();
     
     // Prevent submission if duplicate exists
@@ -340,19 +377,32 @@ const PBC = () => {
     
     setLoading(true);
 
-    const formData = new FormData();
-    formData.append('client_id', form.client_id);
-    formData.append('control_id', form.control_id);
-    formData.append('evidence_name', form.evidence_name);
-    formData.append('testing_status', form.testing_status);
-    formData.append('year', form.year);
-    formData.append('quarter', form.quarter);
-    // Append multiple files
-    if (form.documents) {
-      for (let i = 0; i < form.documents.length; i++) {
-        // 'documents' must match the name used in multer.array('documents') in the controller
-        formData.append('documents', form.documents[i]); 
+    const formData = customFormData || new FormData();
+    
+    // If not using custom form data, build it normally
+    if (!customFormData) {
+      formData.append('client_id', form.client_id);
+      formData.append('control_id', form.control_id);
+      formData.append('evidence_name', form.evidence_name);
+      formData.append('testing_status', form.testing_status);
+      formData.append('year', form.year);
+      formData.append('quarter', form.quarter);
+      // Append multiple files
+      if (form.documents) {
+        for (let i = 0; i < form.documents.length; i++) {
+          // 'documents' must match the name used in multer.array('documents') in the controller
+          formData.append('documents', form.documents[i]); 
+        }
       }
+    } else {
+      // Custom form data already has everything, just ensure form fields are there
+      if (!customFormData.has('client_id')) formData.append('client_id', form.client_id);
+      if (!customFormData.has('control_id')) formData.append('control_id', form.control_id);
+      if (!customFormData.has('evidence_name')) formData.append('evidence_name', form.evidence_name);
+      if (!customFormData.has('testing_status')) formData.append('testing_status', form.testing_status);
+      if (!customFormData.has('year')) formData.append('year', form.year);
+      if (!customFormData.has('quarter')) formData.append('quarter', form.quarter);
+      // Files should already be in customFormData
     }
 
     try {
@@ -377,8 +427,12 @@ const PBC = () => {
           }
         }
       } else {
-        // Create new PBC
-        response = await createPbcRequest(formData);
+        // Create new PBC - formData already has all fields including policy flags
+        response = await api.post('/data/pbc', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
       }
       // Show success message
       await Swal.fire({
@@ -410,6 +464,26 @@ const PBC = () => {
   // Data is already filtered in fetchPbcData to only include required columns
   const tableData = pbcData;
 
+  // Build column header map conditionally
+  const columnHeaderMap = {
+    control_id: 'Control',
+    client_name: 'Client',
+    evidence_name: 'Evidence Name',
+    testing_status: 'PBC Status',
+    year: 'Year',
+    quarter: 'Quarter',
+    document_count: 'Documents'
+  };
+  if (isSuperAdmin) {
+    columnHeaderMap.tenant_name = 'Tenant/Client';
+  }
+
+  // Build filterable columns conditionally
+  const filterableColumns = ['client_name', 'control_id', 'evidence_name'];
+  if (isSuperAdmin) {
+    filterableColumns.push('tenant_name');
+  }
+
   return (
     <div id="pbc-page">
       <div className="d-flex justify-content-between align-items-center mb-3">
@@ -422,6 +496,27 @@ const PBC = () => {
           <i className="fas fa-plus"></i> Add PBC
         </Button>
       </div>
+
+      {isSuperAdmin && tenants.length > 0 && (
+        <Card className="mb-3">
+          <Card.Body>
+            <Form.Group>
+              <Form.Label><strong>Filter by Tenant/Client</strong></Form.Label>
+              <Form.Select
+                value={selectedTenantFilter}
+                onChange={(e) => setSelectedTenantFilter(e.target.value)}
+              >
+                <option value="">All Tenants/Clients</option>
+                {tenants.map(tenant => (
+                  <option key={tenant.tenant_id} value={tenant.tenant_id}>
+                    {tenant.tenant_name}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Card.Body>
+        </Card>
+      )}
       
       {loading && pbcData.length === 0 ? (
         <Spinner animation="border" />
@@ -430,7 +525,8 @@ const PBC = () => {
           data={tableData} 
           title="Evidences (Provided By Company)" 
           tableId="pbc-table"
-          filterableColumns={['client_name', 'control_id', 'evidence_name']}
+          filterableColumns={filterableColumns}
+          columnHeaderMap={columnHeaderMap}
           renderActions={(row) => (
             <>
               <i

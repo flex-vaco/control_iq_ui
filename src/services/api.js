@@ -23,19 +23,25 @@ export const loginUser = (credentials) => {
 };
 
 // --- Data Services ---
-export const getRcmData = (clientId = null) => {
-  const params = clientId ? { client_id: clientId } : {};
+export const getRcmData = (clientId = null, tenantId = null) => {
+  const params = {};
+  if (clientId) params.client_id = clientId;
+  if (tenantId) params.tenant_id = tenantId;
   return api.get('/data/rcm', { params });
 };
 
-export const getAttributesData = (clientId = null) => {
-  const params = clientId ? { client_id: clientId } : {};
+export const getAttributesData = (clientId = null, tenantId = null) => {
+  const params = {};
+  if (clientId) params.client_id = clientId;
+  if (tenantId) params.tenant_id = tenantId;
   return api.get('/data/attributes', { params });
 };
 
 // --- PBC/Evidence Services ---
-export const getPbcData = (clientId = null) => {
-  const params = clientId ? { client_id: clientId } : {};
+export const getPbcData = (clientId = null, tenantId = null) => {
+  const params = {};
+  if (clientId) params.client_id = clientId;
+  if (tenantId) params.tenant_id = tenantId;
   return api.get('/data/pbc', { params });
 };
 
@@ -55,6 +61,10 @@ export const getEvidenceDocuments = (evidenceId) => {
   return api.get(`/data/pbc/${evidenceId}/documents`);
 };
 
+export const getPolicyDocuments = (evidenceId) => {
+  return api.get(`/data/pbc/${evidenceId}/policy-documents`);
+};
+
 export const deleteEvidenceDocument = (documentId) => {
   return api.delete(`/data/pbc/documents/${documentId}`);
 };
@@ -68,8 +78,10 @@ export const createPbcRequest = (formData) => {
 };
 
 // --- Client Services (formerly Company) ---
-export const getClients = () => {
-  return api.get('/data/clients');
+export const getClients = (tenantId = null) => {
+  const params = {};
+  if (tenantId) params.tenant_id = tenantId;
+  return api.get('/data/clients', { params });
 };
 
 export const getClientsForDropdown = () => {
@@ -102,8 +114,11 @@ export const checkDuplicateTestExecution = (controlId, year, quarter, clientId) 
   return api.get('/data/test-executions/check-duplicate', { params });
 };
 
-export const getTestExecutions = () => {
-  return api.get('/data/test-executions');
+export const getTestExecutions = (clientId = null, tenantId = null) => {
+  const params = {};
+  if (clientId) params.client_id = clientId;
+  if (tenantId) params.tenant_id = tenantId;
+  return api.get('/data/test-executions', { params });
 };
 
 export const getTestExecutionById = (id) => {
@@ -136,9 +151,85 @@ export const getTestExecutionEvidenceDocuments = (testExecutionId) => {
   });
 };
 
+export const updateTestExecutionEvidenceResult = (data) => {
+  return api.put('/data/test-execution-evidence-result', data);
+};
+
+export const updateTestExecutionStatusAndResult = (data) => {
+  return api.put('/data/test-executions/status-result', data);
+};
+
 // Legacy exports for backward compatibility during migration
 export const getCompanies = getClients;
 export const getCompanyById = getClientById;
 export const createCompany = createClient;
 export const updateCompany = updateClient;
 export const deleteCompany = deleteClient;
+
+// User Management Services
+export const getUsers = () => {
+  return api.get('/data/users');
+};
+
+export const getUserById = (id) => {
+  return api.get(`/data/users/${id}`);
+};
+
+export const createUser = (userData) => {
+  return api.post('/data/users', userData);
+};
+
+export const updateUser = (id, userData) => {
+  return api.put(`/data/users/${id}`, userData);
+};
+
+export const deleteUser = (id) => {
+  return api.delete(`/data/users/${id}`);
+};
+
+// Role Management Services
+export const getRoles = () => {
+  return api.get('/data/roles');
+};
+
+export const getRoleById = (id) => {
+  return api.get(`/data/roles/${id}`);
+};
+
+export const createRole = (roleData) => {
+  return api.post('/data/roles', roleData);
+};
+
+export const updateRole = (id, roleData) => {
+  return api.put(`/data/roles/${id}`, roleData);
+};
+
+export const deleteRole = (id) => {
+  return api.delete(`/data/roles/${id}`);
+};
+
+// Permission/Access Control Services
+export const getPermissionsByRole = (roleId, tenantId = null) => {
+  const params = tenantId ? { tenant_id: tenantId } : {};
+  return api.get(`/data/permissions/role/${roleId}`, { params });
+};
+
+export const getMyPermissions = () => {
+  return api.get('/data/permissions/my-permissions');
+};
+
+export const updatePermissions = (roleId, permissions, tenantId = null) => {
+  const body = { permissions };
+  if (tenantId) {
+    body.tenant_id = tenantId;
+  }
+  return api.put(`/data/permissions/role/${roleId}`, body);
+};
+
+export const getAvailableResources = () => {
+  return api.get('/data/permissions/resources');
+};
+
+export const getAllTenants = () => {
+  return api.get('/data/permissions/tenants');
+};
