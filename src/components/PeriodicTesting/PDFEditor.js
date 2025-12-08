@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle } from 'react';
-import { Stage, Layer, Rect, Text } from 'react-konva';
+import { Stage, Layer, Rect, Text, Image as KonvaImage } from 'react-konva';
 import { PDFDocument, rgb } from 'pdf-lib';
 
 const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChanges, readOnly = false }, ref) => {
@@ -13,11 +13,37 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [pdfImage, setPdfImage] = useState(null);
+  const [pdfDimensions, setPdfDimensions] = useState(null);
+  const [pdfJsLoaded, setPdfJsLoaded] = useState(false);
+  const [loadingError, setLoadingError] = useState(null);
   const stageRef = useRef();
   const canvasContainerRef = useRef();
-  const pdfIframeRef = useRef();
   const initialRectanglesRef = useRef([]);
+  const pdfBytesRef = useRef(null);
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.async = true;
+    script.onload = () => {
+      if (window['pdfjs-dist/build/pdf']) {
+        window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc = 
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        setPdfJsLoaded(true);
+      }
+    };
+    script.onerror = () => {
+      setLoadingError('Failed to load PDF.js library');
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const updateCanvasSize = () => {
@@ -40,38 +66,90 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   }, []);
 
   useEffect(() => {
-    if (pdfUrl) {
-      setPdfLoaded(false);
-      // Reset rectangles when PDF URL changes
-      setRectangles([]);
-      setNewRect(null);
-      setUndoStack([]);
-      setRedoStack([]);
-      setScale(1);
-      setStagePosition({ x: 0, y: 0 });
-      initialRectanglesRef.current = [];
-      if (onChanges) {
-        onChanges(false);
+    const loadPdf = async () => {
+      if (!pdfUrl || !pdfJsLoaded) {
+        return;
       }
-    }
-  }, [pdfUrl, onChanges]);
 
-  const handleIframeLoad = () => {
-    setPdfLoaded(true);
-  };
+      try {
+        setLoadingError(null);
+        setPdfImage(null);
+        setRectangles([]);
+        setNewRect(null);
+        setUndoStack([]);
+        setRedoStack([]);
+        setScale(1);
+        setStagePosition({ x: 0, y: 0 });
+        initialRectanglesRef.current = [];
+        if (onChanges) {
+          onChanges(false);
+        }
 
-  const rectanglesChanged = useCallback(() => {
-    if (rectangles.length !== initialRectanglesRef.current.length) {
-      return true;
-    }
-    
-    const currentSorted = [...rectangles].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-    const initialSorted = [...initialRectanglesRef.current].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-    
-    return JSON.stringify(currentSorted) !== JSON.stringify(initialSorted);
-  }, [rectangles]);
+        const pdfResponse = await fetch(pdfUrl);
+        if (!pdfResponse.ok) {
+          throw new Error(`Failed to fetch PDF: ${pdfResponse.statusText}`);
+        }
+        const arrayBuffer = await pdfResponse.arrayBuffer();
+        const pdfBytes = new Uint8Array(arrayBuffer);
+        pdfBytesRef.current = Array.from(pdfBytes);
+        
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const pages = pdfDoc.getPages();
+        if (pages.length === 0) {
+          throw new Error('PDF has no pages');
+        }
+        
+        const firstPage = pages[0];
+        const { width, height } = firstPage.getSize();
+        setPdfDimensions({ width, height });
+        
+        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        
+        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        
+        const containerWidth = canvasSize.width;
+        const containerHeight = canvasSize.height;
+        
+        const pdfAspect = width / height;
+        const containerAspect = containerWidth / containerHeight;
+        
+        let renderScale;
+        if (containerAspect > pdfAspect) {
+          renderScale = (containerHeight * 0.95) / height;
+        } else {
+          renderScale = (containerWidth * 0.95) / width;
+        }
+        
+        const viewport = page.getViewport({ scale: renderScale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+        
+        const img = new window.Image();
+        img.src = canvas.toDataURL();
+        img.onload = () => {
+          setPdfImage(img);
+        };
+        
+      } catch (error) {
+        console.error('Error loading PDF:', error);
+        setLoadingError(error.message || 'Failed to load PDF');
+        setPdfImage(null);
+        setPdfDimensions(null);
+        pdfBytesRef.current = null;
+      }
+    };
 
-  const hasChanges = rectanglesChanged();
+    loadPdf();
+  }, [pdfUrl, pdfJsLoaded, canvasSize.width, canvasSize.height, onChanges]);
 
   const pushHistory = () => {
     setUndoStack((prev) => [...prev, rectangles]);
@@ -163,7 +241,6 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
     setNewRect(null);
   };
 
-  // Track changes and notify parent
   useEffect(() => {
     const hasChanges = rectangles.length !== initialRectanglesRef.current.length ||
       JSON.stringify(rectangles.sort((a, b) => (a.id || '').localeCompare(b.id || ''))) !== 
@@ -203,19 +280,14 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
   };
 
   const handleSave = async () => {
-    if (!pdfUrl) {
+    if (!pdfBytesRef.current || !pdfDimensions || !pdfImage) {
+      console.error('No PDF loaded in memory or dimensions not available');
       return;
     }
 
     try {
-      // Fetch the original PDF file
-      const pdfResponse = await fetch(pdfUrl);
-      if (!pdfResponse.ok) {
-        throw new Error(`Failed to fetch PDF: ${pdfResponse.statusText}`);
-      }
-      const pdfBytes = await pdfResponse.arrayBuffer();
-      
-      // Load the PDF document
+      const pdfBytesArray = pdfBytesRef.current;
+      const pdfBytes = new Uint8Array(pdfBytesArray);
       const pdfDoc = await PDFDocument.load(pdfBytes);
       const pages = pdfDoc.getPages();
       if (pages.length === 0) {
@@ -223,93 +295,61 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
       }
       const firstPage = pages[0];
       
-      // Get page dimensions for coordinate conversion
       const { width: pageWidth, height: pageHeight } = firstPage.getSize();
       
-      // Get actual iframe dimensions if available, otherwise use canvas size
-      let displayWidth = canvasSize.width;
-      let displayHeight = canvasSize.height;
+      const displayWidth = pdfImage.width;
+      const displayHeight = pdfImage.height;
       
-      if (pdfIframeRef.current) {
-        try {
-          const iframe = pdfIframeRef.current;
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (iframeDoc) {
-            const pdfViewer = iframeDoc.querySelector('embed') || iframeDoc.body;
-            if (pdfViewer) {
-              displayWidth = pdfViewer.clientWidth || canvasSize.width;
-              displayHeight = pdfViewer.clientHeight || canvasSize.height;
-            }
-          }
-        } catch (e) {
-          // Cross-origin or other iframe access issues - use canvas size
-          console.warn('Could not access iframe dimensions, using canvas size:', e);
-        }
-      }
-      
-      // Calculate scale factors to convert from canvas coordinates to PDF coordinates
-      // Account for the actual display size vs PDF page size
       const scaleX = pageWidth / displayWidth;
       const scaleY = pageHeight / displayHeight;
       
-      // Embed fonts for text rendering with error handling
       let helveticaBoldFont;
       try {
         helveticaBoldFont = await pdfDoc.embedFont('Helvetica-Bold');
       } catch (fontError) {
-        console.warn('Failed to embed Helvetica-Bold, using standard font:', fontError);
-        // Fallback to standard font
         helveticaBoldFont = await pdfDoc.embedFont('Helvetica');
       }
       
-      // Draw annotations on the PDF
       for (const rect of rectangles) {
         try {
-          // Convert canvas coordinates to PDF coordinates
-          // PDF coordinates start from bottom-left, canvas from top-left
-          // Account for scale and position transformations
-          const pdfX = Math.max(0, Math.min(pageWidth, rect.x * scaleX));
-          const pdfY = Math.max(0, Math.min(pageHeight, pageHeight - (rect.y + rect.height) * scaleY));
-          const pdfWidth = Math.max(1, Math.min(pageWidth - pdfX, Math.abs(rect.width) * scaleX));
-          const pdfHeight = Math.max(1, Math.min(pageHeight - pdfY, Math.abs(rect.height) * scaleY));
+          const normalizedX = rect.width >= 0 ? rect.x : rect.x + rect.width;
+          const normalizedY = rect.height >= 0 ? rect.y : rect.y + rect.height;
+          const normalizedWidth = Math.abs(rect.width);
+          const normalizedHeight = Math.abs(rect.height);
+
+          const pdfX = normalizedX * scaleX;
+          const pdfY = pageHeight - (normalizedY + normalizedHeight) * scaleY;
+          const pdfWidth = normalizedWidth * scaleX;
+          const pdfHeight = normalizedHeight * scaleY;
           
-          // Convert hex color to RGB with validation
           let rectColorRgb;
-          try {
-            const colorHex = rect.color || '#ff0000';
-            const hex = colorHex.startsWith('#') ? colorHex.substring(1) : colorHex;
-            if (hex.length === 6) {
-              rectColorRgb = rgb(
-                parseInt(hex.substring(0, 2), 16) / 255,
-                parseInt(hex.substring(2, 4), 16) / 255,
-                parseInt(hex.substring(4, 6), 16) / 255
-              );
-            } else {
-              rectColorRgb = rgb(1, 0, 0); // Default red
-            }
-          } catch (colorError) {
-            console.warn('Invalid color, using default red:', colorError);
+          const colorHex = rect.color || '#ff0000';
+          const hex = colorHex.startsWith('#') ? colorHex.substring(1) : colorHex;
+          if (hex.length === 6) {
+            rectColorRgb = rgb(
+              parseInt(hex.substring(0, 2), 16) / 255,
+              parseInt(hex.substring(2, 4), 16) / 255,
+              parseInt(hex.substring(4, 6), 16) / 255
+            );
+          } else {
             rectColorRgb = rgb(1, 0, 0);
           }
           
-          // Draw rectangle border
           firstPage.drawRectangle({
             x: pdfX,
             y: pdfY,
             width: pdfWidth,
             height: pdfHeight,
             borderColor: rectColorRgb,
-            borderWidth: Math.max(0.5, 2 * Math.min(scaleX, scaleY)),
+            borderWidth: 2,
           });
           
-          // Draw label if present
           if (rect.label && rect.label.trim()) {
-            const labelPdfX = Math.max(0, Math.min(pageWidth, rect.badgeX * scaleX));
-            const labelPdfY = Math.max(0, Math.min(pageHeight, pageHeight - rect.badgeY * scaleY));
-            const labelPdfWidth = Math.max(20, (rect.labelWidth || 40) * scaleX);
-            const labelPdfHeight = Math.max(10, (rect.labelHeight || 16) * scaleY);
+            const labelPdfX = rect.badgeX * scaleX;
+            const labelPdfY = pageHeight - rect.badgeY * scaleY;
+            const labelPdfWidth = (rect.labelWidth || 40) * scaleX;
+            const labelPdfHeight = (rect.labelHeight || 16) * scaleY;
             
-            // Draw label background
             firstPage.drawRectangle({
               x: labelPdfX,
               y: labelPdfY - labelPdfHeight / 2,
@@ -318,146 +358,45 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
               color: rectColorRgb,
             });
             
-            // Draw label text
+            const textHex = textColor || '#ffffff';
+            const hex = textHex.startsWith('#') ? textHex.substring(1) : textHex;
             let textColorRgb;
-            try {
-              const textHex = textColor || '#ffffff';
-              const hex = textHex.startsWith('#') ? textHex.substring(1) : textHex;
-              if (hex.length === 6) {
-                textColorRgb = rgb(
-                  parseInt(hex.substring(0, 2), 16) / 255,
-                  parseInt(hex.substring(2, 4), 16) / 255,
-                  parseInt(hex.substring(4, 6), 16) / 255
-                );
-              } else {
-                textColorRgb = rgb(1, 1, 1); // Default white
-              }
-            } catch (colorError) {
-              textColorRgb = rgb(1, 1, 1); // Default white
+            if (hex.length === 6) {
+              textColorRgb = rgb(
+                parseInt(hex.substring(0, 2), 16) / 255,
+                parseInt(hex.substring(2, 4), 16) / 255,
+                parseInt(hex.substring(4, 6), 16) / 255
+              );
+            } else {
+              textColorRgb = rgb(1, 1, 1);
             }
             
-            const fontSize = Math.max(8, Math.min(20, 11 * Math.min(scaleX, scaleY)));
+            const fontSize = 11 * Math.min(scaleX, scaleY);
+            const textWidth = helveticaBoldFont.widthOfTextAtSize(rect.label, fontSize);
             
-            try {
-              // Calculate text width for centering
-              const textWidth = helveticaBoldFont.widthOfTextAtSize(rect.label, fontSize);
-              
-              // Center text horizontally and vertically in the label box
-              firstPage.drawText(rect.label, {
-                x: labelPdfX + (labelPdfWidth - textWidth) / 2, // Center horizontally
-                y: labelPdfY - labelPdfHeight / 2 + fontSize / 3, // Adjust vertical position
-                size: fontSize,
-                color: textColorRgb,
-                font: helveticaBoldFont,
-              });
-            } catch (textError) {
-              console.warn('Error drawing text label:', textError);
-              // Continue without text if drawing fails
-            }
+            firstPage.drawText(rect.label, {
+              x: labelPdfX + (labelPdfWidth - textWidth) / 2,
+              y: labelPdfY - labelPdfHeight / 2 + fontSize / 3,
+              size: fontSize,
+              color: textColorRgb,
+              font: helveticaBoldFont,
+            });
           }
         } catch (rectError) {
           console.warn('Error drawing rectangle:', rectError, rect);
-          // Continue with next rectangle
         }
       }
       
-      // Save the modified PDF
       const modifiedPdfBytes = await pdfDoc.save();
       const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
 
       initialRectanglesRef.current = JSON.parse(JSON.stringify(rectangles));
       
       if (onSave) {
-        // Save as PDF with annotations embedded
         onSave(blob, rectangles, 'application/pdf');
       }
     } catch (error) {
       console.error('Error saving PDF with annotations:', error);
-      // Fallback: if PDF editing fails, save as image
-      try {
-        const tempStage = new window.Konva.Stage({
-          container: document.createElement('div'),
-          width: canvasSize.width,
-          height: canvasSize.height,
-        });
-
-        const tempLayer = new window.Konva.Layer();
-        tempStage.add(tempLayer);
-
-        // White background
-        const bgRect = new window.Konva.Rect({
-          x: 0,
-          y: 0,
-          width: canvasSize.width,
-          height: canvasSize.height,
-          fill: 'white',
-        });
-        tempLayer.add(bgRect);
-
-        // Draw rectangles and labels
-        rectangles.forEach((rect) => {
-          try {
-            const tempRect = new window.Konva.Rect({
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-              stroke: rect.color || '#ff0000',
-              strokeWidth: 2,
-            });
-            tempLayer.add(tempRect);
-
-            if (rect.label) {
-              const labelBg = new window.Konva.Rect({
-                x: rect.badgeX,
-                y: rect.badgeY - (rect.labelHeight || 16) / 2,
-                width: rect.labelWidth || 40,
-                height: rect.labelHeight || 16,
-                fill: rect.color || '#ff0000',
-                cornerRadius: 3,
-                stroke: 'white',
-                strokeWidth: 1,
-              });
-              tempLayer.add(labelBg);
-
-              const labelText = new window.Konva.Text({
-                x: rect.badgeX,
-                y: rect.badgeY - (rect.labelHeight || 16) / 2 + 2,
-                text: rect.label,
-                fontSize: 11,
-                fill: textColor || '#ffffff',
-                fontStyle: 'bold',
-                align: 'center',
-                width: rect.labelWidth || 40,
-                verticalAlign: 'middle',
-                height: rect.labelHeight || 16,
-              });
-              tempLayer.add(labelText);
-            }
-          } catch (rectError) {
-            console.warn('Error drawing rectangle in fallback:', rectError);
-          }
-        });
-
-        const dataURL = tempStage.toDataURL({ 
-          pixelRatio: 1, 
-          mimeType: 'image/png',
-          quality: 1
-        });
-
-        tempStage.destroy();
-
-        const response = await fetch(dataURL);
-        const blob = await response.blob();
-
-        if (onSave) {
-          onSave(blob, rectangles, 'image/png');
-        }
-      } catch (fallbackError) {
-        console.error('Error in fallback save:', fallbackError);
-        // Re-throw the original error
-        throw new Error(`Failed to save PDF: ${error.message}. Fallback also failed: ${fallbackError.message}`);
-      }
     }
   };
 
@@ -465,9 +404,11 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
     handleSave
   }));
 
+  const displayWidth = pdfImage ? pdfImage.width : canvasSize.width;
+  const displayHeight = pdfImage ? pdfImage.height : canvasSize.height;
+
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Drawing Controls */}
       {!readOnly && (
         <div style={{ 
           padding: '0.5rem', 
@@ -545,7 +486,6 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
         </div>
       )}
 
-      {/* PDF Viewer with Overlay Canvas */}
       <div 
         ref={canvasContainerRef}
         style={{ 
@@ -555,109 +495,89 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
           justifyContent: 'center',
           overflow: 'hidden',
           position: 'relative',
-          backgroundColor: '#f5f5f5'
+          backgroundColor: '#525659'
         }}
       >
-        {pdfUrl ? (
-          <>
-            {/* PDF iframe */}
-            <iframe
-              ref={pdfIframeRef}
-              src={`${pdfUrl}#toolbar=0`}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                zIndex: 1
-              }}
-              onLoad={handleIframeLoad}
-              title="PDF Viewer"
-            />
-            
-            {/* Overlay canvas for drawing */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 2,
-                pointerEvents: (isDrawing && !readOnly) ? 'auto' : 'none'
-              }}
-            >
-              <Stage
-                width={canvasSize.width}
-                height={canvasSize.height}
-                style={{ background: 'transparent' }}
-                ref={stageRef}
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-              >
-                <Layer>
-                  {rectangles.map((rect) => (
-                    <React.Fragment key={rect.id}>
+        {loadingError ? (
+          <div style={{ textAlign: 'center', color: '#ff6b6b', padding: '2rem' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+            <p>{loadingError}</p>
+          </div>
+        ) : pdfImage ? (
+          <Stage
+            width={displayWidth}
+            height={displayHeight}
+            style={{ background: 'white' }}
+            ref={stageRef}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+          >
+            <Layer>
+              <KonvaImage
+                image={pdfImage}
+                width={displayWidth}
+                height={displayHeight}
+              />
+              
+              {rectangles.map((rect) => (
+                <React.Fragment key={rect.id}>
+                  <Rect
+                    x={rect.x}
+                    y={rect.y}
+                    width={rect.width}
+                    height={rect.height}
+                    stroke={rect.color}
+                    strokeWidth={2}
+                  />
+                  {rect.label && (
+                    <>
                       <Rect
-                        x={rect.x}
-                        y={rect.y}
-                        width={rect.width}
-                        height={rect.height}
-                        stroke={rect.color}
-                        strokeWidth={2}
+                        x={rect.badgeX}
+                        y={rect.badgeY - (rect.labelHeight || 16) / 2}
+                        width={rect.labelWidth || 40}
+                        height={rect.labelHeight || 16}
+                        fill={rect.color}
+                        cornerRadius={3}
+                        stroke="white"
+                        strokeWidth={1}
                       />
-                      {rect.label && (
-                        <>
-                          <Rect
-                            x={rect.badgeX}
-                            y={rect.badgeY - (rect.labelHeight || 16) / 2}
-                            width={rect.labelWidth || 40}
-                            height={rect.labelHeight || 16}
-                            fill={rect.color}
-                            cornerRadius={3}
-                            stroke="white"
-                            strokeWidth={1}
-                          />
-                          <Text
-                            x={rect.badgeX}
-                            y={rect.badgeY - (rect.labelHeight || 16) / 2 + 2}
-                            text={rect.label}
-                            fontSize={11}
-                            fill={textColor}
-                            fontStyle="bold"
-                            align="center"
-                            width={rect.labelWidth || 40}
-                            verticalAlign="middle"
-                            height={rect.labelHeight || 16}
-                          />
-                        </>
-                      )}
-                    </React.Fragment>
-                  ))}
-
-                  {newRect && (
-                    <Rect
-                      x={newRect.x}
-                      y={newRect.y}
-                      width={newRect.width}
-                      height={newRect.height}
-                      stroke={boxColor}
-                      dash={[4, 4]}
-                      strokeWidth={2}
-                    />
+                      <Text
+                        x={rect.badgeX}
+                        y={rect.badgeY - (rect.labelHeight || 16) / 2 + 2}
+                        text={rect.label}
+                        fontSize={11}
+                        fill={textColor}
+                        fontStyle="bold"
+                        align="center"
+                        width={rect.labelWidth || 40}
+                        verticalAlign="middle"
+                        height={rect.labelHeight || 16}
+                      />
+                    </>
                   )}
-                </Layer>
-              </Stage>
-            </div>
-          </>
+                </React.Fragment>
+              ))}
+
+              {newRect && (
+                <Rect
+                  x={newRect.x}
+                  y={newRect.y}
+                  width={newRect.width}
+                  height={newRect.height}
+                  stroke={boxColor}
+                  dash={[4, 4]}
+                  strokeWidth={2}
+                />
+              )}
+            </Layer>
+          </Stage>
         ) : (
-          <div style={{ textAlign: 'center', color: '#6c757d', padding: '2rem' }}>
-            <i className="fas fa-spinner fa-spin" style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}></i>
+          <div style={{ textAlign: 'center', color: '#fff', padding: '2rem' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
             <p>Loading PDF...</p>
+            {!pdfJsLoaded && <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Loading PDF.js library...</p>}
           </div>
         )}
       </div>
@@ -668,4 +588,3 @@ const PDFEditor = React.forwardRef(({ pdfUrl, onSave, onCancel, loading, onChang
 PDFEditor.displayName = 'PDFEditor';
 
 export default PDFEditor;
-
