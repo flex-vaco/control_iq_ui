@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } from 'react-bootstrap';
-import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult } from '../../services/api';
+import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences } from '../../services/api';
 import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
 import Swal from 'sweetalert2';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
 import ReportModal from '../../modals/PeriodicTesting/ReportModal';
 import AddEvidenceDocumentsModal from '../../modals/PeriodicTesting/AddEvidenceDocumentsModal';
+import EvaluateAllModal from '../../modals/PeriodicTesting/EvaluateAllModal';
 
 const TestExecutionDetails = () => {
   const { id } = useParams();
@@ -31,6 +32,9 @@ const TestExecutionDetails = () => {
   const [reportData, setReportData] = useState([]); // Data for Report tab
   const [showReportModal, setShowReportModal] = useState(false); // State for Report modal
   const [showAddEvidenceModal, setShowAddEvidenceModal] = useState(false); // State for Add Evidence Documents modal
+  const [showEvaluateAllModal, setShowEvaluateAllModal] = useState(false); // State for Evaluate All modal
+  const [evaluateAllResults, setEvaluateAllResults] = useState(null); // Results from evaluate all
+  const [evaluatingAll, setEvaluatingAll] = useState(false); // Loading state for evaluate all
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -130,6 +134,50 @@ const TestExecutionDetails = () => {
       return `${baseUrl}/uploads/${artifactUrl}`;
     } else {
       return `${baseUrl}/uploads/${artifactUrl}`;
+    }
+  };
+
+  const handleEvaluateAll = async () => {
+    if (!testExecution || !evidenceDocuments || evidenceDocuments.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Evidence Documents',
+        text: 'No evidence documents available to evaluate.',
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
+    // Open modal immediately and show loader
+    setShowEvaluateAllModal(true);
+    setEvaluateAllResults(null);
+    setEvaluatingAll(true);
+    setProcessingDocumentId('evaluate_all'); // Use special identifier
+    
+    try {
+      // Call API to evaluate all evidences
+      const response = await evaluateAllEvidences({
+        test_execution_id: testExecution.test_execution_id,
+        rcm_id: testExecution.rcm_id,
+        client_id: testExecution.client_id
+      });
+
+      if (response.data && response.data.results) {
+        setEvaluateAllResults(response.data.results);
+      }
+    } catch (error) {
+      console.error('Error evaluating all evidences:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to evaluate all evidences. Please try again.',
+        confirmButtonColor: '#286070'
+      });
+      // Close modal on error
+      setShowEvaluateAllModal(false);
+    } finally {
+      setEvaluatingAll(false);
+      setProcessingDocumentId(null);
     }
   };
 
@@ -642,14 +690,27 @@ const TestExecutionDetails = () => {
               <div className="mt-3">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5 className="mb-0">{evidenceDetails.evidence_name} - Evidence Documents</h5>
-                  <Button 
-                    variant="primary" 
-                    size="sm"
-                    onClick={() => setShowAddEvidenceModal(true)}
-                  >
-                    <i className="fas fa-plus me-2"></i>
-                    Add Evidences
-                  </Button>
+                  <div className="d-flex gap-2">
+                    {evidenceDocuments.length > 0 && (
+                      <Button 
+                        variant="success" 
+                        size="sm"
+                        onClick={handleEvaluateAll}
+                        disabled={processingDocumentId !== null}
+                      >
+                        <i className="fas fa-check-double me-2"></i>
+                        Evaluate All
+                      </Button>
+                    )}
+                    <Button 
+                      variant="primary" 
+                      size="sm"
+                      onClick={() => setShowAddEvidenceModal(true)}
+                    >
+                      <i className="fas fa-plus me-2"></i>
+                      Add Evidences
+                    </Button>
+                  </div>
                 </div>
                 {evidenceDocuments.length > 0 ? (
                   <Table striped bordered hover responsive>
@@ -882,6 +943,52 @@ const TestExecutionDetails = () => {
             console.error('Error refreshing evidence documents:', err);
           }
         }}
+      />
+
+      <EvaluateAllModal
+        show={showEvaluateAllModal}
+        onHide={() => {
+          setShowEvaluateAllModal(false);
+          setEvaluateAllResults(null);
+          setEvaluatingAll(false);
+          // Refresh evidence status map and report data
+          if (testExecution) {
+            Promise.all(
+              evidenceDocuments.map(async (doc) => {
+                try {
+                  const statusResponse = await checkTestExecutionEvidence(
+                    testExecution.test_execution_id,
+                    doc.document_id
+                  );
+                  if (statusResponse.data.exists) {
+                    setEvidenceStatusMap(prev => ({
+                      ...prev,
+                      [doc.document_id]: {
+                        exists: true,
+                        status: statusResponse.data.data.status
+                      }
+                    }));
+                  }
+                } catch (err) {
+                  console.error('Error refreshing status:', err);
+                }
+              })
+            );
+            
+            // Refresh report data
+            getTestExecutionEvidenceDocuments(testExecution.test_execution_id)
+              .then(reportResponse => {
+                setReportData(reportResponse.data.data || []);
+              })
+              .catch(err => console.error('Error refreshing report data:', err));
+          }
+        }}
+        testExecution={testExecution}
+        rcmDetails={rcmDetails}
+        testAttributes={testAttributes}
+        evidenceDocuments={evidenceDocuments}
+        evaluateAllResults={evaluateAllResults}
+        evaluatingAll={evaluatingAll}
       />
     </Container>
   );

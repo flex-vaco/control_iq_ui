@@ -272,7 +272,9 @@ const DynamicTable = ({ data, title, tableId, filterableColumns = null, columnHe
                   paginatedData.map((row, index) => (
                     <tr key={startIndex + index}>
                       {headers.map((key) => (
-                        <td key={`${key}-${startIndex + index}`}>{String(row[key] || '')}</td>
+                        <td key={`${key}-${startIndex + index}`}>
+                          {row[key] !== null && row[key] !== undefined ? String(row[key]) : ''}
+                        </td>
                       ))}
                       {renderActions && (
                         <td>
