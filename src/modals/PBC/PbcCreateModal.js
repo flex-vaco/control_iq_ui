@@ -18,6 +18,7 @@ const PbcCreateModal = ({
   duplicateError,
   checkingDuplicate,
   existingDocuments = [],
+  existingPolicyDocuments = [],
   loadingDocuments = false,
   onDeleteDocument = null
 }) => {
@@ -257,51 +258,99 @@ const PbcCreateModal = ({
           </Form.Group>
 
           {mode === 'edit' && (
-            <Form.Group className="mb-3">
-              <Form.Label>Existing Documents</Form.Label>
-              {loadingDocuments ? (
-                <div className="text-center py-2">
-                  <Spinner animation="border" size="sm" /> Loading documents...
-                </div>
-              ) : existingDocuments.length > 0 ? (
-                <ListGroup>
-                  {existingDocuments.map((doc, index) => {
-                    // Extract base URL (without /api) for serving static files
-                    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-                    const baseUrl = apiUrl.replace('/api', '');
-                    const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
-                    const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
-                    return (
-                      <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
-                        <a 
-                          href={documentUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-decoration-none"
-                        >
-                          <i className="fas fa-file me-2"></i>
-                          {doc.document_name || fileName}
-                        </a>
-                        {onDeleteDocument && (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="text-danger p-0 ms-2"
-                            onClick={() => onDeleteDocument(doc.document_id)}
-                            disabled={loading}
-                            title="Delete document"
+            <>
+              <Form.Group className="mb-3">
+                <Form.Label>Existing Evidence Documents</Form.Label>
+                {loadingDocuments ? (
+                  <div className="text-center py-2">
+                    <Spinner animation="border" size="sm" /> Loading documents...
+                  </div>
+                ) : existingDocuments.length > 0 ? (
+                  <ListGroup>
+                    {existingDocuments.map((doc, index) => {
+                      // Extract base URL (without /api) for serving static files
+                      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                      const baseUrl = apiUrl.replace('/api', '');
+                      const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
+                      const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
+                      return (
+                        <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
+                          <a 
+                            href={documentUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-decoration-none"
                           >
-                            <i className="fas fa-trash"></i>
-                          </Button>
-                        )}
-                      </ListGroup.Item>
-                    );
-                  })}
-                </ListGroup>
-              ) : (
-                <Form.Text className="text-muted">No documents uploaded yet.</Form.Text>
-              )}
-            </Form.Group>
+                            <i className="fas fa-file me-2"></i>
+                            {doc.document_name || fileName}
+                          </a>
+                          {onDeleteDocument && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="text-danger p-0 ms-2"
+                              onClick={() => onDeleteDocument(doc.document_id)}
+                              disabled={loading}
+                              title="Delete document"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </Button>
+                          )}
+                        </ListGroup.Item>
+                      );
+                    })}
+                  </ListGroup>
+                ) : (
+                  <Form.Text className="text-muted">No evidence documents uploaded yet.</Form.Text>
+                )}
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Existing Policy Documents</Form.Label>
+                {loadingDocuments ? (
+                  <div className="text-center py-2">
+                    <Spinner animation="border" size="sm" /> Loading documents...
+                  </div>
+                ) : existingPolicyDocuments.length > 0 ? (
+                  <ListGroup>
+                    {existingPolicyDocuments.map((doc, index) => {
+                      // Extract base URL (without /api) for serving static files
+                      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                      const baseUrl = apiUrl.replace('/api', '');
+                      const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
+                      const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
+                      return (
+                        <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
+                          <a 
+                            href={documentUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-decoration-none"
+                          >
+                            <i className="fas fa-file me-2"></i>
+                            {doc.document_name || fileName}
+                          </a>
+                          {onDeleteDocument && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="text-danger p-0 ms-2"
+                              onClick={() => onDeleteDocument(doc.document_id)}
+                              disabled={loading}
+                              title="Delete document"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </Button>
+                          )}
+                        </ListGroup.Item>
+                      );
+                    })}
+                  </ListGroup>
+                ) : (
+                  <Form.Text className="text-muted">No policy documents uploaded yet.</Form.Text>
+                )}
+              </Form.Group>
+            </>
           )}
 
           {/* Duplicate error message at bottom above button */}

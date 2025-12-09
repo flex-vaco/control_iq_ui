@@ -159,6 +159,10 @@ export const updateTestExecutionStatusAndResult = (data) => {
   return api.put('/data/test-executions/status-result', data);
 };
 
+export const evaluateAllEvidences = (data) => {
+  return api.post('/data/evaluate-all-evidences', data);
+};
+
 // Legacy exports for backward compatibility during migration
 export const getCompanies = getClients;
 export const getCompanyById = getClientById;

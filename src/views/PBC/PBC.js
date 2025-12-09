@@ -3,7 +3,7 @@ import { Button, Spinner, Form, Card } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { useAuth } from '../../context/AuthContext';
 import DynamicTable from '../../components/DynamicTable';
-import { getPbcData, getRcmControls, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, deleteEvidenceDocument, getAllTenants } from '../../services/api';
+import { getPbcData, getRcmControls, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, getPolicyDocuments, deleteEvidenceDocument, getAllTenants } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
 
 const PBC = () => {
@@ -37,6 +37,7 @@ const PBC = () => {
   const [duplicateError, setDuplicateError] = useState(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [existingDocuments, setExistingDocuments] = useState([]);
+  const [existingPolicyDocuments, setExistingPolicyDocuments] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
 
   // --- Data Fetching ---
@@ -69,11 +70,13 @@ const PBC = () => {
           client_name: item.client_name || '',
           evidence_name: item.evidence_name || '',
           testing_status: item.testing_status || '',
-          year: item.year || '',
-          quarter: item.quarter || '',
+          year: item.year || '-',
+          quarter: item.quarter || '-',
           document_count: item.document_count || 0,
+          policy_document_count: item.policy_document_count || 0,
           tenant_id: item.tenant_id || null
         };
+        
         // Only include tenant_name if user is super admin
         if (isSuperAdmin && item.tenant_name) {
           data.tenant_name = item.tenant_name;
@@ -164,16 +167,21 @@ const PBC = () => {
       }
       setModalMode('edit');
       
-      // Fetch existing documents
+      // Fetch existing documents (both evidence and policy)
       const evidenceId = pbcItem.evidence_id;
       if (evidenceId) {
         setLoadingDocuments(true);
         try {
-          const response = await getEvidenceDocuments(evidenceId);
-          setExistingDocuments(response.data || []);
+          const [evidenceResponse, policyResponse] = await Promise.all([
+            getEvidenceDocuments(evidenceId),
+            getPolicyDocuments(evidenceId)
+          ]);
+          setExistingDocuments(evidenceResponse.data || []);
+          setExistingPolicyDocuments(policyResponse.data || []);
         } catch (err) {
-          console.error('Failed to fetch evidence documents:', err);
+          console.error('Failed to fetch documents:', err);
           setExistingDocuments([]);
+          setExistingPolicyDocuments([]);
         } finally {
           setLoadingDocuments(false);
         }
@@ -192,6 +200,7 @@ const PBC = () => {
       setRcmControls([]);
       setModalMode('create');
       setExistingDocuments([]);
+      setExistingPolicyDocuments([]);
       setCurrentDescription('');
     }
     setDuplicateError(null);
@@ -348,8 +357,12 @@ const PBC = () => {
       
       // Refresh the documents list
       if (selectedPbc && selectedPbc.evidence_id) {
-        const response = await getEvidenceDocuments(selectedPbc.evidence_id);
-        setExistingDocuments(response.data || []);
+        const [evidenceResponse, policyResponse] = await Promise.all([
+          getEvidenceDocuments(selectedPbc.evidence_id),
+          getPolicyDocuments(selectedPbc.evidence_id)
+        ]);
+        setExistingDocuments(evidenceResponse.data || []);
+        setExistingPolicyDocuments(policyResponse.data || []);
       }
       
       // Refresh the table to update document count
@@ -420,10 +433,14 @@ const PBC = () => {
         const evidenceId = selectedPbc.evidence_id;
         if (evidenceId) {
           try {
-            const docResponse = await getEvidenceDocuments(evidenceId);
-            setExistingDocuments(docResponse.data || []);
+            const [evidenceResponse, policyResponse] = await Promise.all([
+              getEvidenceDocuments(evidenceId),
+              getPolicyDocuments(evidenceId)
+            ]);
+            setExistingDocuments(evidenceResponse.data || []);
+            setExistingPolicyDocuments(policyResponse.data || []);
           } catch (err) {
-            console.error('Failed to refresh evidence documents:', err);
+            console.error('Failed to refresh documents:', err);
           }
         }
       } else {
@@ -464,6 +481,11 @@ const PBC = () => {
   // Data is already filtered in fetchPbcData to only include required columns
   const tableData = pbcData;
 
+  // Format table data to show both document counts
+  const formattedTableData = tableData.map(item => ({
+    ...item
+  }));
+
   // Build column header map conditionally
   const columnHeaderMap = {
     control_id: 'Control',
@@ -472,7 +494,7 @@ const PBC = () => {
     testing_status: 'PBC Status',
     year: 'Year',
     quarter: 'Quarter',
-    document_count: 'Documents'
+    document_count: 'Evidence Documents'
   };
   if (isSuperAdmin) {
     columnHeaderMap.tenant_name = 'Tenant/Client';
@@ -522,7 +544,7 @@ const PBC = () => {
         <Spinner animation="border" />
       ) : (
         <DynamicTable 
-          data={tableData} 
+          data={formattedTableData} 
           title="Evidences (Provided By Company)" 
           tableId="pbc-table"
           filterableColumns={filterableColumns}
@@ -564,6 +586,7 @@ const PBC = () => {
         duplicateError={duplicateError}
         checkingDuplicate={checkingDuplicate}
         existingDocuments={existingDocuments}
+        existingPolicyDocuments={existingPolicyDocuments}
         loadingDocuments={loadingDocuments}
         onDeleteDocument={modalMode === 'edit' ? handleDeleteDocument : null}
       />
