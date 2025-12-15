@@ -63,6 +63,11 @@ const Sidebar = () => {
             Attributes
           </Nav.Link>
         </Nav.Item>
+        <Nav.Item>
+          <Nav.Link as={NavLink} to="/ai-prompts" id="nav-ai-prompts">
+            AI Prompts
+          </Nav.Link>
+        </Nav.Item>
         
         <Nav.Item>
           <Nav.Link
