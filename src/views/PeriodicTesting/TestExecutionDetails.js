@@ -35,6 +35,9 @@ const TestExecutionDetails = () => {
   const [showEvaluateAllModal, setShowEvaluateAllModal] = useState(false); // State for Evaluate All modal
   const [evaluateAllResults, setEvaluateAllResults] = useState(null); // Results from evaluate all
   const [evaluatingAll, setEvaluatingAll] = useState(false); // Loading state for evaluate all
+  const [testResultChangeComment, setTestResultChangeComment] = useState(''); // Comment for test result change
+  const [showTestResultComment, setShowTestResultComment] = useState(false); // Show comment input
+  const [pendingTestResult, setPendingTestResult] = useState(null); // Store pending result change
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -134,6 +137,51 @@ const TestExecutionDetails = () => {
       return `${baseUrl}/uploads/${artifactUrl}`;
     } else {
       return `${baseUrl}/uploads/${artifactUrl}`;
+    }
+  };
+
+  const handleTestResultChange = async (newResult, comment) => {
+    if (!testExecution) return;
+    
+    try {
+      await updateTestExecutionStatusAndResult({
+        test_execution_id: testExecution.test_execution_id,
+        status: testExecution.status || 'pending',
+        result: newResult,
+        test_result_change_comment: comment
+      });
+      
+      // Hide comment input and reset pending result
+      setShowTestResultComment(false);
+      setTestResultChangeComment('');
+      setPendingTestResult(null);
+      
+      // Refresh the page data
+      const response = await getTestExecutionById(id);
+      setTestExecution(response.data.test_execution);
+      
+      // Refresh report data
+      try {
+        const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+        setReportData(reportResponse.data.data || []);
+      } catch (err) {
+        console.error('Error refreshing report data:', err);
+      }
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'Test result updated successfully.',
+        confirmButtonColor: '#286070'
+      });
+    } catch (error) {
+      console.error('Error updating result:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to update result. Please try again.',
+        confirmButtonColor: '#286070'
+      });
     }
   };
 
@@ -500,50 +548,92 @@ const TestExecutionDetails = () => {
                   <option value="failed">Failed</option>
                 </select>
                 {testExecution.status !== 'completed' && (
-                  <select
-                    value={testExecution.result || 'na'}
-                    onChange={async (e) => {
-                      try {
-                        await updateTestExecutionStatusAndResult({
-                          test_execution_id: testExecution.test_execution_id,
-                          status: testExecution.status || 'pending',
-                          result: e.target.value
-                        });
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <select
+                      value={pendingTestResult !== null ? pendingTestResult : (testExecution.result || 'na')}
+                      onChange={(e) => {
+                        const newResult = e.target.value;
+                        const oldResult = testExecution.result || 'na';
                         
-                        // Refresh the page data
-                        const response = await getTestExecutionById(id);
-                        setTestExecution(response.data.test_execution);
+                        // Check if result is changing from pass to fail or fail to pass
+                        const isPassToFail = (oldResult === 'pass' && newResult === 'fail');
+                        const isFailToPass = (oldResult === 'fail' && newResult === 'pass');
                         
-                        // Refresh report data
-                        try {
-                          const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
-                          setReportData(reportResponse.data.data || []);
-                        } catch (err) {
-                          console.error('Error refreshing report data:', err);
+                        if (isPassToFail || isFailToPass) {
+                          // Show comment input and store pending result
+                          setPendingTestResult(newResult);
+                          setShowTestResultComment(true);
+                          setTestResultChangeComment('');
+                        } else {
+                          // Hide comment input
+                          setPendingTestResult(null);
+                          setShowTestResultComment(false);
+                          setTestResultChangeComment('');
+                          // Update immediately if not changing pass/fail
+                          handleTestResultChange(newResult, '');
                         }
-                      } catch (error) {
-                        console.error('Error updating result:', error);
-                        Swal.fire({
-                          icon: 'error',
-                          title: 'Error',
-                          text: error.response?.data?.message || 'Failed to update result. Please try again.',
-                          confirmButtonColor: '#286070'
-                        });
-                      }
-                    }}
-                    style={{
-                      fontSize: '0.875rem',
-                      padding: '0.25rem 0.5rem',
-                      border: '1px solid #dee2e6',
-                      borderRadius: '0.25rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="na">N/A</option>
-                    <option value="pass">Pass</option>
-                    <option value="fail">Fail</option>
-                    <option value="partial">Partial</option>
-                  </select>
+                      }}
+                      style={{
+                        fontSize: '0.875rem',
+                        padding: '0.25rem 0.5rem',
+                        border: '1px solid #dee2e6',
+                        borderRadius: '0.25rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="na">N/A</option>
+                      <option value="pass">Pass</option>
+                      <option value="fail">Fail</option>
+                      <option value="partial">Partial</option>
+                    </select>
+                    {showTestResultComment && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: '500', display: 'block', marginBottom: '0.25rem' }}>
+                          Reason for changing test result <span style={{ color: '#dc3545' }}>*</span>
+                        </label>
+                        <textarea
+                          value={testResultChangeComment}
+                          onChange={(e) => setTestResultChangeComment(e.target.value)}
+                          placeholder="Please provide a reason for changing the test result..."
+                          style={{
+                            width: '100%',
+                            fontSize: '0.8rem',
+                            padding: '0.5rem',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '0.25rem',
+                            minHeight: '60px',
+                            resize: 'vertical'
+                          }}
+                          required
+                        />
+                        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              if (pendingTestResult !== null) {
+                                handleTestResultChange(pendingTestResult, testResultChangeComment);
+                              }
+                            }}
+                            disabled={!testResultChangeComment || testResultChangeComment.trim() === ''}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setShowTestResultComment(false);
+                              setTestResultChangeComment('');
+                              setPendingTestResult(null);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
