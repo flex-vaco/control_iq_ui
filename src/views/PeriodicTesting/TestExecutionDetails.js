@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner, Accordion } from 'react-bootstrap';
 import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences } from '../../services/api';
 import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
@@ -38,6 +38,7 @@ const TestExecutionDetails = () => {
   const [testResultChangeComment, setTestResultChangeComment] = useState(''); // Comment for test result change
   const [showTestResultComment, setShowTestResultComment] = useState(false); // Show comment input
   const [pendingTestResult, setPendingTestResult] = useState(null); // Store pending result change
+  const [activeAccordionKey, setActiveAccordionKey] = useState(null); // Active accordion key for sample grouping
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -126,6 +127,24 @@ const TestExecutionDetails = () => {
 
     fetchDetails();
   }, [id]);
+
+  // Set default active accordion key when evidence documents change
+  useEffect(() => {
+    if (evidenceDocuments.length > 0 && activeAccordionKey === null) {
+      const groupedBySample = evidenceDocuments.reduce((acc, doc) => {
+        const sampleName = doc.sample_name || 'No Sample';
+        if (!acc[sampleName]) {
+          acc[sampleName] = [];
+        }
+        acc[sampleName].push(doc);
+        return acc;
+      }, {});
+      const sampleNames = Object.keys(groupedBySample);
+      if (sampleNames.length > 0) {
+        setActiveAccordionKey(sampleNames[0]);
+      }
+    }
+  }, [evidenceDocuments, activeAccordionKey]);
 
   const getDocumentUrl = (artifactUrl) => {
     if (!artifactUrl) return '';
@@ -802,79 +821,107 @@ const TestExecutionDetails = () => {
                     </Button>
                   </div>
                 </div>
-                {evidenceDocuments.length > 0 ? (
-                  <Table striped bordered hover responsive>
-                    <thead>
-                      <tr>
-                        <th>Document Name</th>
-                        <th>Document Link</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evidenceDocuments.map((doc) => {
-                        const statusInfo = evidenceStatusMap[doc.document_id];
-                        const hasRecord = statusInfo?.exists || false;
-                        const status = statusInfo?.status;
-                        let statusDisplay = 'Pending Test';
-                        if (hasRecord) {
-                          if (status === 1 || status === true || status === '1' || status === 'true') {
-                            statusDisplay = 'Pass';
-                          } else if (status === 0 || status === false || status === '0' || status === 'false') {
-                            statusDisplay = 'Fail';
-                          } else {
-                            statusDisplay = 'Pending Test';
-                          }
-                        }
-                        
+                {evidenceDocuments.length > 0 ? (() => {
+                  // Group documents by sample_name
+                  const groupedBySample = evidenceDocuments.reduce((acc, doc) => {
+                    const sampleName = doc.sample_name || 'No Sample';
+                    if (!acc[sampleName]) {
+                      acc[sampleName] = [];
+                    }
+                    acc[sampleName].push(doc);
+                    return acc;
+                  }, {});
+
+                  const sampleNames = Object.keys(groupedBySample);
+
+                  return (
+                    <Accordion activeKey={activeAccordionKey} onSelect={(key) => setActiveAccordionKey(key)}>
+                      {sampleNames.map((sampleName, index) => {
+                        const sampleDocs = groupedBySample[sampleName];
                         return (
-                          <tr key={doc.document_id}>
-                            <td>{doc.document_name || '-'}</td>
-                            <td>
-                              <a 
-                                href={getDocumentUrl(doc.artifact_url)} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary"
-                              >
-                                <i className="fas fa-external-link-alt me-2"></i>
-                                View Document
-                              </a>
-                            </td>
-                            <td>
-                              {statusDisplay}
-                            </td>
-                            <td>
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm"
-                                onClick={() => handleMarkEvidenceFile(doc)}
-                                disabled={processingDocumentId !== null}
-                              >
-                                {processingDocumentId === doc.document_id ? (
-                                  <>
-                                    <Spinner
-                                      as="span"
-                                      animation="border"
-                                      size="sm"
-                                      role="status"
-                                      aria-hidden="true"
-                                      className="me-2"
-                                    />
-                                    Getting Analysis Details
-                                  </>
-                                ) : (
-                                  hasRecord ? 'Mark' : 'Test & Mark'
-                                )}
-                              </Button>
-                            </td>
-                          </tr>
+                          <Accordion.Item eventKey={sampleName} key={sampleName}>
+                            <Accordion.Header>
+                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                            </Accordion.Header>
+                            <Accordion.Body>
+                              <Table striped bordered hover responsive>
+                                <thead>
+                                  <tr>
+                                    <th>Document Name</th>
+                                    <th>Document Link</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sampleDocs.map((doc) => {
+                                    const statusInfo = evidenceStatusMap[doc.document_id];
+                                    const hasRecord = statusInfo?.exists || false;
+                                    const status = statusInfo?.status;
+                                    let statusDisplay = 'Pending Test';
+                                    if (hasRecord) {
+                                      if (status === 1 || status === true || status === '1' || status === 'true') {
+                                        statusDisplay = 'Pass';
+                                      } else if (status === 0 || status === false || status === '0' || status === 'false') {
+                                        statusDisplay = 'Fail';
+                                      } else {
+                                        statusDisplay = 'Pending Test';
+                                      }
+                                    }
+                                    
+                                    return (
+                                      <tr key={doc.document_id}>
+                                        <td>{doc.document_name || '-'}</td>
+                                        <td>
+                                          <a 
+                                            href={getDocumentUrl(doc.artifact_url)} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-primary"
+                                          >
+                                            <i className="fas fa-external-link-alt me-2"></i>
+                                            View Document
+                                          </a>
+                                        </td>
+                                        <td>
+                                          {statusDisplay}
+                                        </td>
+                                        <td>
+                                          <Button 
+                                            variant="outline-primary" 
+                                            size="sm"
+                                            onClick={() => handleMarkEvidenceFile(doc)}
+                                            disabled={processingDocumentId !== null}
+                                          >
+                                            {processingDocumentId === doc.document_id ? (
+                                              <>
+                                                <Spinner
+                                                  as="span"
+                                                  animation="border"
+                                                  size="sm"
+                                                  role="status"
+                                                  aria-hidden="true"
+                                                  className="me-2"
+                                                />
+                                                Getting Analysis Details
+                                              </>
+                                            ) : (
+                                              hasRecord ? 'Mark' : 'Test & Mark'
+                                            )}
+                                          </Button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </Accordion.Body>
+                          </Accordion.Item>
                         );
                       })}
-                    </tbody>
-                  </Table>
-                ) : (
+                    </Accordion>
+                  );
+                })() : (
                   <Alert variant="info">
                     No evidence documents found for this control, year, and quarter.
                   </Alert>

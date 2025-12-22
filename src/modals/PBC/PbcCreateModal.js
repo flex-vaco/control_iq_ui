@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Form, Alert, Spinner, Row, Col, ListGroup } from 'react-bootstrap';
+import { Modal, Button, Form, Alert, Spinner, Row, Col, ListGroup, Card, Accordion } from 'react-bootstrap';
 
 const PbcCreateModal = ({
   show,
@@ -22,18 +22,56 @@ const PbcCreateModal = ({
   loadingDocuments = false,
   onDeleteDocument = null
 }) => {
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [policyDocumentFlags, setPolicyDocumentFlags] = useState({});
+  // Sample structure: { id, name, files: [], policyFlags: {} }
+  const [samples, setSamples] = useState([{ id: 1, name: '', files: [], policyFlags: {} }]);
+  const [activeAccordionKey, setActiveAccordionKey] = useState(null);
+  const [activePolicyAccordionKey, setActivePolicyAccordionKey] = useState(null);
   
   const testingStatuses = ['Pending', 'Partial Received', 'Received'];
   
   // Reset when modal opens/closes
   useEffect(() => {
     if (!show) {
-      setSelectedFiles([]);
-      setPolicyDocumentFlags({});
+      setSamples([{ id: 1, name: '', files: [], policyFlags: {} }]);
+      setActiveAccordionKey(null);
+      setActivePolicyAccordionKey(null);
     }
   }, [show]);
+
+  // Set default accordion keys when documents are loaded
+  useEffect(() => {
+    if (existingDocuments.length > 0 && activeAccordionKey === null) {
+      const groupedBySample = existingDocuments.reduce((acc, doc) => {
+        const sampleName = doc.sample_name || 'No Sample';
+        if (!acc[sampleName]) {
+          acc[sampleName] = [];
+        }
+        acc[sampleName].push(doc);
+        return acc;
+      }, {});
+      const sampleNames = Object.keys(groupedBySample);
+      if (sampleNames.length > 0) {
+        setActiveAccordionKey(sampleNames[0]);
+      }
+    }
+  }, [existingDocuments, activeAccordionKey]);
+
+  useEffect(() => {
+    if (existingPolicyDocuments.length > 0 && activePolicyAccordionKey === null) {
+      const groupedBySample = existingPolicyDocuments.reduce((acc, doc) => {
+        const sampleName = doc.sample_name || 'No Sample';
+        if (!acc[sampleName]) {
+          acc[sampleName] = [];
+        }
+        acc[sampleName].push(doc);
+        return acc;
+      }, {});
+      const sampleNames = Object.keys(groupedBySample);
+      if (sampleNames.length > 0) {
+        setActivePolicyAccordionKey(sampleNames[0]);
+      }
+    }
+  }, [existingPolicyDocuments, activePolicyAccordionKey]);
   
   // Generate year options (current year and next 5 years)
   const currentYear = new Date().getFullYear();
@@ -45,6 +83,52 @@ const PbcCreateModal = ({
   // Quarter options
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
+  // Add a new sample
+  const addSample = () => {
+    const newId = Math.max(...samples.map(s => s.id), 0) + 1;
+    setSamples([...samples, { id: newId, name: '', files: [], policyFlags: {} }]);
+  };
+
+  // Remove a sample (only if more than 1)
+  const removeSample = (sampleId) => {
+    if (samples.length > 1) {
+      setSamples(samples.filter(s => s.id !== sampleId));
+    }
+  };
+
+  // Update sample name
+  const updateSampleName = (sampleId, name) => {
+    setSamples(samples.map(s => s.id === sampleId ? { ...s, name } : s));
+  };
+
+  // Handle file selection for a sample
+  const handleSampleFileChange = (sampleId, e) => {
+    const files = Array.from(e.target.files);
+    setSamples(samples.map(s => {
+      if (s.id === sampleId) {
+        const policyFlags = {};
+        files.forEach((file, index) => {
+          policyFlags[index] = false;
+        });
+        return { ...s, files, policyFlags };
+      }
+      return s;
+    }));
+  };
+
+  // Update policy flag for a file in a sample
+  const updatePolicyFlag = (sampleId, fileIndex, isPolicy) => {
+    setSamples(samples.map(s => {
+      if (s.id === sampleId) {
+        return {
+          ...s,
+          policyFlags: { ...s.policyFlags, [fileIndex]: isPolicy }
+        };
+      }
+      return s;
+    }));
+  };
+
   return (
     <Modal show={show} onHide={onHide} size="lg">
       <Modal.Header closeButton>
@@ -52,7 +136,7 @@ const PbcCreateModal = ({
       </Modal.Header>
       <Form onSubmit={(e) => {
         e.preventDefault();
-        // Build form data with policy document flags
+        // Build form data with samples
         const formData = new FormData();
         formData.append('client_id', form.client_id);
         formData.append('control_id', form.control_id);
@@ -61,15 +145,17 @@ const PbcCreateModal = ({
         formData.append('year', form.year);
         formData.append('quarter', form.quarter);
         
-        // Append files and policy flags
-        if (selectedFiles && selectedFiles.length > 0) {
-          for (let i = 0; i < selectedFiles.length; i++) {
-            formData.append('documents', selectedFiles[i]);
-            // Append policy flag for each file
-            const isPolicy = policyDocumentFlags[i] || false;
+        // Append files with sample names and policy flags
+        samples.forEach((sample) => {
+          if (sample.files && sample.files.length > 0) {
+            sample.files.forEach((file, fileIndex) => {
+              formData.append('documents', file);
+              formData.append('sample_names', sample.name || '');
+              const isPolicy = sample.policyFlags[fileIndex] || false;
             formData.append('is_policy_document', isPolicy);
+            });
           }
-        }
+        });
         
         // Call parent's onSubmit with the event and formData
         onSubmit(e, formData);
@@ -205,49 +291,83 @@ const PbcCreateModal = ({
             </Col>
           </Row>
 
-          <Form.Group controlId="documentUpload" className="mb-3">
-            <Form.Label>Upload Document(s){mode === 'edit' && (<span className="italic"> - You will have to re-test the newly uploaded document(s)</span>)}</Form.Label>
+          <Form.Group className="mb-3">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <Form.Label className="mb-0">
+                <strong>Samples</strong> {mode === 'edit' && (<span className="italic"> - You will have to re-test the newly uploaded document(s)</span>)}
+              </Form.Label>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={addSample}
+                disabled={loading}
+                type="button"
+              >
+                <i className="fas fa-plus me-1"></i> Add Sample
+              </Button>
+            </div>
+            <Form.Text className="text-muted d-block mb-3">
+              Add samples with their documents. Each sample can have multiple documents.
+            </Form.Text>
+            
+            {samples.map((sample, sampleIndex) => (
+              <Card key={sample.id} className="mb-3" style={{ border: '1px solid #dee2e6' }}>
+                <Card.Body>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <Form.Label className="mb-0 fw-bold">Sample {sampleIndex + 1}</Form.Label>
+                    {samples.length > 1 && (
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => removeSample(sample.id)}
+                        disabled={loading}
+                        type="button"
+                      >
+                        <i className="fas fa-trash"></i> Remove
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <Form.Group className="mb-3">
+                    <Form.Label>Sample Name <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder="e.g., Sample 1, Q1 Sample, etc."
+                      value={sample.name}
+                      onChange={(e) => updateSampleName(sample.id, e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </Form.Group>
+                  
+                  <Form.Group>
+                    <Form.Label>Upload Document(s)</Form.Label>
             <Form.Control 
               type="file" 
-              onChange={(e) => {
-                const files = Array.from(e.target.files);
-                setSelectedFiles(files);
-                // Initialize policy flags to false for all files
-                const flags = {};
-                files.forEach((file, index) => {
-                  flags[index] = false;
-                });
-                setPolicyDocumentFlags(flags);
-                onFileChange(e);
-              }} 
+                      onChange={(e) => handleSampleFileChange(sample.id, e)}
               multiple
               disabled={loading}
             />
             <Form.Text className="text-muted">
-              You can select multiple files to attach to this evidence request.
+                      Select multiple files for this sample.
             </Form.Text>
             
-            {/* Show checkboxes for selected files */}
-            {selectedFiles.length > 0 && (
+                    {/* Show selected files for this sample */}
+                    {sample.files.length > 0 && (
               <div className="mt-3">
                 <Form.Label className="fw-bold">Mark as Policy Document:</Form.Label>
                 <ListGroup>
-                  {selectedFiles.map((file, index) => (
-                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
+                          {sample.files.map((file, fileIndex) => (
+                            <ListGroup.Item key={fileIndex} className="d-flex justify-content-between align-items-center">
                       <span>
                         <i className="fas fa-file me-2"></i>
                         {file.name}
                       </span>
                       <Form.Check
                         type="switch"
-                        id={`policy-doc-${index}`}
-                        checked={policyDocumentFlags[index] || false}
-                        onChange={(e) => {
-                          setPolicyDocumentFlags(prev => ({
-                            ...prev,
-                            [index]: e.target.checked
-                          }));
-                        }}
+                                id={`policy-doc-${sample.id}-${fileIndex}`}
+                                checked={sample.policyFlags[fileIndex] || false}
+                                onChange={(e) => updatePolicyFlag(sample.id, fileIndex, e.target.checked)}
                         label="Policy Document"
                       />
                     </ListGroup.Item>
@@ -255,6 +375,10 @@ const PbcCreateModal = ({
                 </ListGroup>
               </div>
             )}
+                  </Form.Group>
+                </Card.Body>
+              </Card>
+            ))}
           </Form.Group>
 
           {mode === 'edit' && (
@@ -265,14 +389,36 @@ const PbcCreateModal = ({
                   <div className="text-center py-2">
                     <Spinner animation="border" size="sm" /> Loading documents...
                   </div>
-                ) : existingDocuments.length > 0 ? (
+                ) : existingDocuments.length > 0 ? (() => {
+                  // Group documents by sample_name
+                  const groupedBySample = existingDocuments.reduce((acc, doc) => {
+                    const sampleName = doc.sample_name || 'No Sample';
+                    if (!acc[sampleName]) {
+                      acc[sampleName] = [];
+                    }
+                    acc[sampleName].push(doc);
+                    return acc;
+                  }, {});
+
+                  const sampleNames = Object.keys(groupedBySample);
+
+                  return (
+                    <Accordion activeKey={activeAccordionKey} onSelect={(key) => setActiveAccordionKey(key)}>
+                      {sampleNames.map((sampleName) => {
+                        const sampleDocs = groupedBySample[sampleName];
+                        return (
+                          <Accordion.Item eventKey={sampleName} key={sampleName}>
+                            <Accordion.Header>
+                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                            </Accordion.Header>
+                            <Accordion.Body>
                   <ListGroup>
-                    {existingDocuments.map((doc, index) => {
+                                {sampleDocs.map((doc) => {
                       // Extract base URL (without /api) for serving static files
                       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
                       const baseUrl = apiUrl.replace('/api', '');
                       const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
-                      const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
+                                  const fileName = doc.artifact_url.split('/').pop() || `Document`;
                       return (
                         <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
                           <a 
@@ -300,7 +446,13 @@ const PbcCreateModal = ({
                       );
                     })}
                   </ListGroup>
-                ) : (
+                            </Accordion.Body>
+                          </Accordion.Item>
+                        );
+                      })}
+                    </Accordion>
+                  );
+                })() : (
                   <Form.Text className="text-muted">No evidence documents uploaded yet.</Form.Text>
                 )}
               </Form.Group>
@@ -311,14 +463,36 @@ const PbcCreateModal = ({
                   <div className="text-center py-2">
                     <Spinner animation="border" size="sm" /> Loading documents...
                   </div>
-                ) : existingPolicyDocuments.length > 0 ? (
+                ) : existingPolicyDocuments.length > 0 ? (() => {
+                  // Group documents by sample_name
+                  const groupedBySample = existingPolicyDocuments.reduce((acc, doc) => {
+                    const sampleName = doc.sample_name || 'No Sample';
+                    if (!acc[sampleName]) {
+                      acc[sampleName] = [];
+                    }
+                    acc[sampleName].push(doc);
+                    return acc;
+                  }, {});
+
+                  const sampleNames = Object.keys(groupedBySample);
+
+                  return (
+                    <Accordion activeKey={activePolicyAccordionKey} onSelect={(key) => setActivePolicyAccordionKey(key)}>
+                      {sampleNames.map((sampleName) => {
+                        const sampleDocs = groupedBySample[sampleName];
+                        return (
+                          <Accordion.Item eventKey={sampleName} key={sampleName}>
+                            <Accordion.Header>
+                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                            </Accordion.Header>
+                            <Accordion.Body>
                   <ListGroup>
-                    {existingPolicyDocuments.map((doc, index) => {
+                                {sampleDocs.map((doc) => {
                       // Extract base URL (without /api) for serving static files
                       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
                       const baseUrl = apiUrl.replace('/api', '');
                       const documentUrl = `${baseUrl}/uploads/${doc.artifact_url}`;
-                      const fileName = doc.artifact_url.split('/').pop() || `Document ${index + 1}`;
+                                  const fileName = doc.artifact_url.split('/').pop() || `Document`;
                       return (
                         <ListGroup.Item key={doc.document_id} className="d-flex justify-content-between align-items-center">
                           <a 
@@ -346,7 +520,13 @@ const PbcCreateModal = ({
                       );
                     })}
                   </ListGroup>
-                ) : (
+                            </Accordion.Body>
+                          </Accordion.Item>
+                        );
+                      })}
+                    </Accordion>
+                  );
+                })() : (
                   <Form.Text className="text-muted">No policy documents uploaded yet.</Form.Text>
                 )}
               </Form.Group>
