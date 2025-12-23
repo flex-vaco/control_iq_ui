@@ -39,6 +39,7 @@ const TestExecutionDetails = () => {
   const [showTestResultComment, setShowTestResultComment] = useState(false); // Show comment input
   const [pendingTestResult, setPendingTestResult] = useState(null); // Store pending result change
   const [activeAccordionKey, setActiveAccordionKey] = useState(null); // Active accordion key for sample grouping
+  const [evaluatingSample, setEvaluatingSample] = useState(null); // Track which sample is being evaluated
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -204,7 +205,7 @@ const TestExecutionDetails = () => {
     }
   };
 
-  const handleEvaluateAll = async () => {
+  const handleEvaluateAll = async (sampleName = null) => {
     if (!testExecution || !evidenceDocuments || evidenceDocuments.length === 0) {
       Swal.fire({
         icon: 'warning',
@@ -215,18 +216,35 @@ const TestExecutionDetails = () => {
       return;
     }
 
+    // Filter documents by sample if sampleName is provided
+    const documentsToEvaluate = sampleName 
+      ? evidenceDocuments.filter(doc => (doc.sample_name || 'No Sample') === sampleName)
+      : evidenceDocuments;
+
+    if (documentsToEvaluate.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Documents',
+        text: `No evidence documents found for sample "${sampleName}".`,
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
     // Open modal immediately and show loader
     setShowEvaluateAllModal(true);
     setEvaluateAllResults(null);
     setEvaluatingAll(true);
+    setEvaluatingSample(sampleName);
     setProcessingDocumentId('evaluate_all'); // Use special identifier
     
     try {
-      // Call API to evaluate all evidences
+      // Call API to evaluate all evidences for this sample
       const response = await evaluateAllEvidences({
         test_execution_id: testExecution.test_execution_id,
         rcm_id: testExecution.rcm_id,
-        client_id: testExecution.client_id
+        client_id: testExecution.client_id,
+        sample_name: sampleName || null
       });
 
       if (response.data && response.data.results) {
@@ -244,6 +262,7 @@ const TestExecutionDetails = () => {
       setShowEvaluateAllModal(false);
     } finally {
       setEvaluatingAll(false);
+      setEvaluatingSample(null);
       setProcessingDocumentId(null);
     }
   };
@@ -800,17 +819,6 @@ const TestExecutionDetails = () => {
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5 className="mb-0">{evidenceDetails.evidence_name} - Evidence Documents</h5>
                   <div className="d-flex gap-2">
-                    {evidenceDocuments.length > 0 && (
-                      <Button 
-                        variant="success" 
-                        size="sm"
-                        onClick={handleEvaluateAll}
-                        disabled={processingDocumentId !== null}
-                      >
-                        <i className="fas fa-check-double me-2"></i>
-                        Evaluate All
-                      </Button>
-                    )}
                     <Button 
                       variant="primary" 
                       size="sm"
@@ -844,6 +852,33 @@ const TestExecutionDetails = () => {
                               <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
                             </Accordion.Header>
                             <Accordion.Body>
+                              <div className="d-flex justify-content-end mb-3">
+                                <Button 
+                                  variant="success" 
+                                  size="sm"
+                                  onClick={() => handleEvaluateAll(sampleName)}
+                                  disabled={processingDocumentId !== null || evaluatingSample === sampleName}
+                                >
+                                  {evaluatingSample === sampleName ? (
+                                    <>
+                                      <Spinner
+                                        as="span"
+                                        animation="border"
+                                        size="sm"
+                                        role="status"
+                                        aria-hidden="true"
+                                        className="me-2"
+                                      />
+                                      Evaluating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-check-double me-2"></i>
+                                      Evaluate All
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                               <Table striped bordered hover responsive>
                                 <thead>
                                   <tr>
@@ -1126,6 +1161,7 @@ const TestExecutionDetails = () => {
         evidenceDocuments={evidenceDocuments}
         evaluateAllResults={evaluateAllResults}
         evaluatingAll={evaluatingAll}
+        sampleName={evaluatingSample}
       />
     </Container>
   );
