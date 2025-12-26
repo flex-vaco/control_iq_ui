@@ -5,7 +5,7 @@ import { api, checkTestExecutionEvidence } from '../../services/api';
 import ImageEditor from '../../components/PeriodicTesting/ImageEditor';
 import PDFEditor from '../../components/PeriodicTesting/PDFEditor';
 
-const EvaluateAllModal = ({ show, onHide, testExecution, rcmDetails, testAttributes, evidenceDocuments, evaluateAllResults, evaluatingAll = false }) => {
+const EvaluateAllModal = ({ show, onHide, testExecution, rcmDetails, testAttributes, evidenceDocuments, evaluateAllResults, evaluatingAll = false, sampleName = null }) => {
   const [selectedEvidence, setSelectedEvidence] = useState(null);
   const [existingTestResult, setExistingTestResult] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -406,7 +406,10 @@ const EvaluateAllModal = ({ show, onHide, testExecution, rcmDetails, testAttribu
       size="xl"
     >
       <Modal.Header closeButton>
-        <Modal.Title>Evaluate All - Overall Results</Modal.Title>
+        <Modal.Title>
+          Evaluate All - Overall Results
+          {sampleName && <span className="ms-2 text-muted">({sampleName})</span>}
+        </Modal.Title>
       </Modal.Header>
       
       <Modal.Body style={{ padding: 0, height: 'calc(90vh - 120px)' }}>

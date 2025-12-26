@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner, Accordion } from 'react-bootstrap';
 import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences } from '../../services/api';
 import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
@@ -35,6 +35,11 @@ const TestExecutionDetails = () => {
   const [showEvaluateAllModal, setShowEvaluateAllModal] = useState(false); // State for Evaluate All modal
   const [evaluateAllResults, setEvaluateAllResults] = useState(null); // Results from evaluate all
   const [evaluatingAll, setEvaluatingAll] = useState(false); // Loading state for evaluate all
+  const [testResultChangeComment, setTestResultChangeComment] = useState(''); // Comment for test result change
+  const [showTestResultComment, setShowTestResultComment] = useState(false); // Show comment input
+  const [pendingTestResult, setPendingTestResult] = useState(null); // Store pending result change
+  const [activeAccordionKey, setActiveAccordionKey] = useState(null); // Active accordion key for sample grouping
+  const [evaluatingSample, setEvaluatingSample] = useState(null); // Track which sample is being evaluated
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -124,6 +129,24 @@ const TestExecutionDetails = () => {
     fetchDetails();
   }, [id]);
 
+  // Set default active accordion key when evidence documents change
+  useEffect(() => {
+    if (evidenceDocuments.length > 0 && activeAccordionKey === null) {
+      const groupedBySample = evidenceDocuments.reduce((acc, doc) => {
+        const sampleName = doc.sample_name || 'No Sample';
+        if (!acc[sampleName]) {
+          acc[sampleName] = [];
+        }
+        acc[sampleName].push(doc);
+        return acc;
+      }, {});
+      const sampleNames = Object.keys(groupedBySample);
+      if (sampleNames.length > 0) {
+        setActiveAccordionKey(sampleNames[0]);
+      }
+    }
+  }, [evidenceDocuments, activeAccordionKey]);
+
   const getDocumentUrl = (artifactUrl) => {
     if (!artifactUrl) return '';
     const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -137,7 +160,52 @@ const TestExecutionDetails = () => {
     }
   };
 
-  const handleEvaluateAll = async () => {
+  const handleTestResultChange = async (newResult, comment) => {
+    if (!testExecution) return;
+    
+    try {
+      await updateTestExecutionStatusAndResult({
+        test_execution_id: testExecution.test_execution_id,
+        status: testExecution.status || 'pending',
+        result: newResult,
+        test_result_change_comment: comment
+      });
+      
+      // Hide comment input and reset pending result
+      setShowTestResultComment(false);
+      setTestResultChangeComment('');
+      setPendingTestResult(null);
+      
+      // Refresh the page data
+      const response = await getTestExecutionById(id);
+      setTestExecution(response.data.test_execution);
+      
+      // Refresh report data
+      try {
+        const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+        setReportData(reportResponse.data.data || []);
+      } catch (err) {
+        console.error('Error refreshing report data:', err);
+      }
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'Test result updated successfully.',
+        confirmButtonColor: '#286070'
+      });
+    } catch (error) {
+      console.error('Error updating result:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to update result. Please try again.',
+        confirmButtonColor: '#286070'
+      });
+    }
+  };
+
+  const handleEvaluateAll = async (sampleName = null) => {
     if (!testExecution || !evidenceDocuments || evidenceDocuments.length === 0) {
       Swal.fire({
         icon: 'warning',
@@ -148,18 +216,35 @@ const TestExecutionDetails = () => {
       return;
     }
 
+    // Filter documents by sample if sampleName is provided
+    const documentsToEvaluate = sampleName 
+      ? evidenceDocuments.filter(doc => (doc.sample_name || 'No Sample') === sampleName)
+      : evidenceDocuments;
+
+    if (documentsToEvaluate.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Documents',
+        text: `No evidence documents found for sample "${sampleName}".`,
+        confirmButtonColor: '#286070'
+      });
+      return;
+    }
+
     // Open modal immediately and show loader
     setShowEvaluateAllModal(true);
     setEvaluateAllResults(null);
     setEvaluatingAll(true);
+    setEvaluatingSample(sampleName);
     setProcessingDocumentId('evaluate_all'); // Use special identifier
     
     try {
-      // Call API to evaluate all evidences
+      // Call API to evaluate all evidences for this sample
       const response = await evaluateAllEvidences({
         test_execution_id: testExecution.test_execution_id,
         rcm_id: testExecution.rcm_id,
-        client_id: testExecution.client_id
+        client_id: testExecution.client_id,
+        sample_name: sampleName || null
       });
 
       if (response.data && response.data.results) {
@@ -177,6 +262,7 @@ const TestExecutionDetails = () => {
       setShowEvaluateAllModal(false);
     } finally {
       setEvaluatingAll(false);
+      setEvaluatingSample(null);
       setProcessingDocumentId(null);
     }
   };
@@ -500,50 +586,92 @@ const TestExecutionDetails = () => {
                   <option value="failed">Failed</option>
                 </select>
                 {testExecution.status !== 'completed' && (
-                  <select
-                    value={testExecution.result || 'na'}
-                    onChange={async (e) => {
-                      try {
-                        await updateTestExecutionStatusAndResult({
-                          test_execution_id: testExecution.test_execution_id,
-                          status: testExecution.status || 'pending',
-                          result: e.target.value
-                        });
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <select
+                      value={pendingTestResult !== null ? pendingTestResult : (testExecution.result || 'na')}
+                      onChange={(e) => {
+                        const newResult = e.target.value;
+                        const oldResult = testExecution.result || 'na';
                         
-                        // Refresh the page data
-                        const response = await getTestExecutionById(id);
-                        setTestExecution(response.data.test_execution);
+                        // Check if result is changing from pass to fail or fail to pass
+                        const isPassToFail = (oldResult === 'pass' && newResult === 'fail');
+                        const isFailToPass = (oldResult === 'fail' && newResult === 'pass');
                         
-                        // Refresh report data
-                        try {
-                          const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
-                          setReportData(reportResponse.data.data || []);
-                        } catch (err) {
-                          console.error('Error refreshing report data:', err);
+                        if (isPassToFail || isFailToPass) {
+                          // Show comment input and store pending result
+                          setPendingTestResult(newResult);
+                          setShowTestResultComment(true);
+                          setTestResultChangeComment('');
+                        } else {
+                          // Hide comment input
+                          setPendingTestResult(null);
+                          setShowTestResultComment(false);
+                          setTestResultChangeComment('');
+                          // Update immediately if not changing pass/fail
+                          handleTestResultChange(newResult, '');
                         }
-                      } catch (error) {
-                        console.error('Error updating result:', error);
-                        Swal.fire({
-                          icon: 'error',
-                          title: 'Error',
-                          text: error.response?.data?.message || 'Failed to update result. Please try again.',
-                          confirmButtonColor: '#286070'
-                        });
-                      }
-                    }}
-                    style={{
-                      fontSize: '0.875rem',
-                      padding: '0.25rem 0.5rem',
-                      border: '1px solid #dee2e6',
-                      borderRadius: '0.25rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="na">N/A</option>
-                    <option value="pass">Pass</option>
-                    <option value="fail">Fail</option>
-                    <option value="partial">Partial</option>
-                  </select>
+                      }}
+                      style={{
+                        fontSize: '0.875rem',
+                        padding: '0.25rem 0.5rem',
+                        border: '1px solid #dee2e6',
+                        borderRadius: '0.25rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="na">N/A</option>
+                      <option value="pass">Pass</option>
+                      <option value="fail">Fail</option>
+                      <option value="partial">Partial</option>
+                    </select>
+                    {showTestResultComment && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: '500', display: 'block', marginBottom: '0.25rem' }}>
+                          Reason for changing test result <span style={{ color: '#dc3545' }}>*</span>
+                        </label>
+                        <textarea
+                          value={testResultChangeComment}
+                          onChange={(e) => setTestResultChangeComment(e.target.value)}
+                          placeholder="Please provide a reason for changing the test result..."
+                          style={{
+                            width: '100%',
+                            fontSize: '0.8rem',
+                            padding: '0.5rem',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '0.25rem',
+                            minHeight: '60px',
+                            resize: 'vertical'
+                          }}
+                          required
+                        />
+                        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              if (pendingTestResult !== null) {
+                                handleTestResultChange(pendingTestResult, testResultChangeComment);
+                              }
+                            }}
+                            disabled={!testResultChangeComment || testResultChangeComment.trim() === ''}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setShowTestResultComment(false);
+                              setTestResultChangeComment('');
+                              setPendingTestResult(null);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -691,17 +819,6 @@ const TestExecutionDetails = () => {
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5 className="mb-0">{evidenceDetails.evidence_name} - Evidence Documents</h5>
                   <div className="d-flex gap-2">
-                    {evidenceDocuments.length > 0 && (
-                      <Button 
-                        variant="success" 
-                        size="sm"
-                        onClick={handleEvaluateAll}
-                        disabled={processingDocumentId !== null}
-                      >
-                        <i className="fas fa-check-double me-2"></i>
-                        Evaluate All
-                      </Button>
-                    )}
                     <Button 
                       variant="primary" 
                       size="sm"
@@ -712,79 +829,134 @@ const TestExecutionDetails = () => {
                     </Button>
                   </div>
                 </div>
-                {evidenceDocuments.length > 0 ? (
-                  <Table striped bordered hover responsive>
-                    <thead>
-                      <tr>
-                        <th>Document Name</th>
-                        <th>Document Link</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evidenceDocuments.map((doc) => {
-                        const statusInfo = evidenceStatusMap[doc.document_id];
-                        const hasRecord = statusInfo?.exists || false;
-                        const status = statusInfo?.status;
-                        let statusDisplay = 'Pending Test';
-                        if (hasRecord) {
-                          if (status === 1 || status === true || status === '1' || status === 'true') {
-                            statusDisplay = 'Pass';
-                          } else if (status === 0 || status === false || status === '0' || status === 'false') {
-                            statusDisplay = 'Fail';
-                          } else {
-                            statusDisplay = 'Pending Test';
-                          }
-                        }
-                        
+                {evidenceDocuments.length > 0 ? (() => {
+                  // Group documents by sample_name
+                  const groupedBySample = evidenceDocuments.reduce((acc, doc) => {
+                    const sampleName = doc.sample_name || 'No Sample';
+                    if (!acc[sampleName]) {
+                      acc[sampleName] = [];
+                    }
+                    acc[sampleName].push(doc);
+                    return acc;
+                  }, {});
+
+                  const sampleNames = Object.keys(groupedBySample);
+
+                  return (
+                    <Accordion activeKey={activeAccordionKey} onSelect={(key) => setActiveAccordionKey(key)}>
+                      {sampleNames.map((sampleName, index) => {
+                        const sampleDocs = groupedBySample[sampleName];
                         return (
-                          <tr key={doc.document_id}>
-                            <td>{doc.document_name || '-'}</td>
-                            <td>
-                              <a 
-                                href={getDocumentUrl(doc.artifact_url)} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary"
-                              >
-                                <i className="fas fa-external-link-alt me-2"></i>
-                                View Document
-                              </a>
-                            </td>
-                            <td>
-                              {statusDisplay}
-                            </td>
-                            <td>
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm"
-                                onClick={() => handleMarkEvidenceFile(doc)}
-                                disabled={processingDocumentId !== null}
-                              >
-                                {processingDocumentId === doc.document_id ? (
-                                  <>
-                                    <Spinner
-                                      as="span"
-                                      animation="border"
-                                      size="sm"
-                                      role="status"
-                                      aria-hidden="true"
-                                      className="me-2"
-                                    />
-                                    Getting Analysis Details
-                                  </>
-                                ) : (
-                                  hasRecord ? 'Mark' : 'Test & Mark'
-                                )}
-                              </Button>
-                            </td>
-                          </tr>
+                          <Accordion.Item eventKey={sampleName} key={sampleName}>
+                            <Accordion.Header>
+                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                            </Accordion.Header>
+                            <Accordion.Body>
+                              <div className="d-flex justify-content-end mb-3">
+                                <Button 
+                                  variant="success" 
+                                  size="sm"
+                                  onClick={() => handleEvaluateAll(sampleName)}
+                                  disabled={processingDocumentId !== null || evaluatingSample === sampleName}
+                                >
+                                  {evaluatingSample === sampleName ? (
+                                    <>
+                                      <Spinner
+                                        as="span"
+                                        animation="border"
+                                        size="sm"
+                                        role="status"
+                                        aria-hidden="true"
+                                        className="me-2"
+                                      />
+                                      Evaluating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-check-double me-2"></i>
+                                      Evaluate All
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              <Table striped bordered hover responsive>
+                                <thead>
+                                  <tr>
+                                    <th>Document Name</th>
+                                    <th>Document Link</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sampleDocs.map((doc) => {
+                                    const statusInfo = evidenceStatusMap[doc.document_id];
+                                    const hasRecord = statusInfo?.exists || false;
+                                    const status = statusInfo?.status;
+                                    let statusDisplay = 'Pending Test';
+                                    if (hasRecord) {
+                                      if (status === 1 || status === true || status === '1' || status === 'true') {
+                                        statusDisplay = 'Pass';
+                                      } else if (status === 0 || status === false || status === '0' || status === 'false') {
+                                        statusDisplay = 'Fail';
+                                      } else {
+                                        statusDisplay = 'Pending Test';
+                                      }
+                                    }
+                                    
+                                    return (
+                                      <tr key={doc.document_id}>
+                                        <td>{doc.document_name || '-'}</td>
+                                        <td>
+                                          <a 
+                                            href={getDocumentUrl(doc.artifact_url)} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-primary"
+                                          >
+                                            <i className="fas fa-external-link-alt me-2"></i>
+                                            View Document
+                                          </a>
+                                        </td>
+                                        <td>
+                                          {statusDisplay}
+                                        </td>
+                                        <td>
+                                          <Button 
+                                            variant="outline-primary" 
+                                            size="sm"
+                                            onClick={() => handleMarkEvidenceFile(doc)}
+                                            disabled={processingDocumentId !== null}
+                                          >
+                                            {processingDocumentId === doc.document_id ? (
+                                              <>
+                                                <Spinner
+                                                  as="span"
+                                                  animation="border"
+                                                  size="sm"
+                                                  role="status"
+                                                  aria-hidden="true"
+                                                  className="me-2"
+                                                />
+                                                Getting Analysis Details
+                                              </>
+                                            ) : (
+                                              hasRecord ? 'Mark' : 'Test & Mark'
+                                            )}
+                                          </Button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </Accordion.Body>
+                          </Accordion.Item>
                         );
                       })}
-                    </tbody>
-                  </Table>
-                ) : (
+                    </Accordion>
+                  );
+                })() : (
                   <Alert variant="info">
                     No evidence documents found for this control, year, and quarter.
                   </Alert>
@@ -989,6 +1161,7 @@ const TestExecutionDetails = () => {
         evidenceDocuments={evidenceDocuments}
         evaluateAllResults={evaluateAllResults}
         evaluatingAll={evaluatingAll}
+        sampleName={evaluatingSample}
       />
     </Container>
   );

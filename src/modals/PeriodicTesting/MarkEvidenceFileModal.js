@@ -417,7 +417,24 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     if (!editedTestResults || !editedTestResults.attributes_results) return;
     
     const updated = JSON.parse(JSON.stringify(editedTestResults));
+    const oldAttr = updated.attributes_results[index];
+    const oldValue = oldAttr.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr.result;
+    
+    // Check if result is changing from pass to fail or fail to pass
+    const isChanging = (oldValue === true && newValue === false) || (oldValue === false && newValue === true);
+    
     updated.attributes_results[index].attribute_final_result = newValue;
+    
+    // If changing result, require comment (clear existing if not changing)
+    if (isChanging) {
+      // Show comment input - comment will be required on save
+      if (!updated.attributes_results[index].attribute_result_change_comment) {
+        updated.attributes_results[index].attribute_result_change_comment = '';
+      }
+    } else {
+      // Clear comment if not changing
+      updated.attributes_results[index].attribute_result_change_comment = '';
+    }
     
     // Recalculate totals
     const passed = updated.attributes_results.filter(attr => attr.attribute_final_result === true).length;
@@ -430,11 +447,44 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     setEditedTestResults(updated);
   };
 
+  const handleAttributeCommentChange = (index, comment) => {
+    if (!editedTestResults || !editedTestResults.attributes_results) return;
+    
+    const updated = JSON.parse(JSON.stringify(editedTestResults));
+    updated.attributes_results[index].attribute_result_change_comment = comment;
+    setEditedTestResults(updated);
+  };
+
   const handleManualFinalResultChange = (newValue) => {
     if (!editedTestResults) return;
     
     const updated = JSON.parse(JSON.stringify(editedTestResults));
+    const oldValue = updated.manual_final_result !== undefined ? updated.manual_final_result : updated.final_result;
+    
+    // Check if result is changing from pass to fail or fail to pass
+    const isChanging = (oldValue === true && newValue === false) || (oldValue === false && newValue === true);
+    
     updated.manual_final_result = newValue;
+    
+    // If changing result, require comment (clear existing if not changing)
+    if (isChanging) {
+      // Show comment input - comment will be required on save
+      if (!updated.evidence_result_change_comment) {
+        updated.evidence_result_change_comment = '';
+      }
+    } else {
+      // Clear comment if not changing
+      updated.evidence_result_change_comment = '';
+    }
+    
+    setEditedTestResults(updated);
+  };
+
+  const handleEvidenceCommentChange = (comment) => {
+    if (!editedTestResults) return;
+    
+    const updated = JSON.parse(JSON.stringify(editedTestResults));
+    updated.evidence_result_change_comment = comment;
     setEditedTestResults(updated);
   };
 
@@ -458,6 +508,53 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         confirmButtonColor: '#286070'
       });
       return;
+    }
+
+    // Validate comments for attribute result changes
+    if (editedTestResults.attributes_results && Array.isArray(editedTestResults.attributes_results)) {
+      for (let i = 0; i < editedTestResults.attributes_results.length; i++) {
+        const attr = editedTestResults.attributes_results[i];
+        const oldAttr = testResults?.attributes_results?.[i];
+        
+        if (oldAttr) {
+          const oldValue = oldAttr.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr.result;
+          const newValue = attr.attribute_final_result;
+          
+          // Check if result changed from pass to fail or fail to pass
+          if (oldValue !== newValue && (oldValue === true || oldValue === false) && (newValue === true || newValue === false)) {
+            // Require comment when changing result
+            if (!attr.attribute_result_change_comment || attr.attribute_result_change_comment.trim() === '') {
+              Swal.fire({
+                icon: 'warning',
+                title: 'Comment Required',
+                text: `Please provide a reason for changing the result for attribute "${attr.attribute_name || 'Unknown'}".`,
+                confirmButtonColor: '#286070'
+              });
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Validate comment for overall evidence result change
+    if (testResults) {
+      const oldManualResult = testResults.manual_final_result !== undefined ? testResults.manual_final_result : testResults.final_result;
+      const newManualResult = editedTestResults.manual_final_result;
+      
+      // Check if result changed from pass to fail or fail to pass
+      if (oldManualResult !== newManualResult && (oldManualResult === true || oldManualResult === false) && (newManualResult === true || newManualResult === false)) {
+        // Require comment when changing result
+        if (!editedTestResults.evidence_result_change_comment || editedTestResults.evidence_result_change_comment.trim() === '') {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Comment Required',
+            text: 'Please provide a reason for changing the overall evidence result.',
+            confirmButtonColor: '#286070'
+          });
+          return;
+        }
+      }
     }
 
     setSavingResults(true);
@@ -726,6 +823,41 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                     {attr.reason}
                                   </p>
                                 )}
+                                {/* Show comment input if result is being changed */}
+                                {!isTestExecutionCompleted && (() => {
+                                  const oldAttr = testResults?.attributes_results?.[index];
+                                  const oldValue = oldAttr?.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr?.result;
+                                  const newValue = attr.attribute_final_result;
+                                  const isChanging = oldValue !== undefined && oldValue !== newValue && 
+                                                    (oldValue === true || oldValue === false) && 
+                                                    (newValue === true || newValue === false);
+                                  
+                                  if (isChanging) {
+                                    return (
+                                      <div style={{ marginTop: '0.5rem' }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: '500', display: 'block', marginBottom: '0.25rem' }}>
+                                          Reason for changing result <span style={{ color: '#dc3545' }}>*</span>
+                                        </label>
+                                        <textarea
+                                          value={attr.attribute_result_change_comment || ''}
+                                          onChange={(e) => handleAttributeCommentChange(index, e.target.value)}
+                                          placeholder="Please provide a reason for changing the result..."
+                                          style={{
+                                            width: '100%',
+                                            fontSize: '0.8rem',
+                                            padding: '0.5rem',
+                                            border: '1px solid #dee2e6',
+                                            borderRadius: '0.25rem',
+                                            minHeight: '60px',
+                                            resize: 'vertical'
+                                          }}
+                                          required
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                               );
                             })}
@@ -742,26 +874,62 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                   Passed: {editedTestResults.total_attributes_passed || 0} | 
                                   Failed: {editedTestResults.total_attributes_failed || 0}
                                 </p>
-                                <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <p style={{ margin: '0.25rem 0', fontWeight: 'bold', color: (editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? '#155724' : '#721c24' }}>
-                                    Final Result: {(editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? 'Pass' : 'Fail'}
-                                  </p>
-                                  {!isTestExecutionCompleted && (
-                                    <select
-                                      value={editedTestResults.manual_final_result !== undefined ? (editedTestResults.manual_final_result ? 'true' : 'false') : (editedTestResults.final_result ? 'true' : 'false')}
-                                      onChange={(e) => handleManualFinalResultChange(e.target.value === 'true')}
-                                      style={{
-                                        fontSize: '0.8rem',
-                                        padding: '0.25rem 0.5rem',
-                                        border: '1px solid #dee2e6',
-                                        borderRadius: '0.25rem',
-                                        cursor: 'pointer'
-                                      }}
-                                    >
-                                      <option value="true">Pass</option>
-                                      <option value="false">Fail</option>
-                                    </select>
-                                  )}
+                                <div style={{ marginTop: '0.5rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <p style={{ margin: '0.25rem 0', fontWeight: 'bold', color: (editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? '#155724' : '#721c24' }}>
+                                      Final Result: {(editedTestResults.manual_final_result !== undefined ? editedTestResults.manual_final_result : editedTestResults.final_result) ? 'Pass' : 'Fail'}
+                                    </p>
+                                    {!isTestExecutionCompleted && (
+                                      <select
+                                        value={editedTestResults.manual_final_result !== undefined ? (editedTestResults.manual_final_result ? 'true' : 'false') : (editedTestResults.final_result ? 'true' : 'false')}
+                                        onChange={(e) => handleManualFinalResultChange(e.target.value === 'true')}
+                                        style={{
+                                          fontSize: '0.8rem',
+                                          padding: '0.25rem 0.5rem',
+                                          border: '1px solid #dee2e6',
+                                          borderRadius: '0.25rem',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        <option value="true">Pass</option>
+                                        <option value="false">Fail</option>
+                                      </select>
+                                    )}
+                                  </div>
+                                  {/* Show comment input if overall evidence result is being changed */}
+                                  {!isTestExecutionCompleted && (() => {
+                                    const oldManualResult = testResults?.manual_final_result !== undefined ? testResults.manual_final_result : testResults?.final_result;
+                                    const newManualResult = editedTestResults.manual_final_result;
+                                    const isChanging = oldManualResult !== undefined && oldManualResult !== newManualResult && 
+                                                      (oldManualResult === true || oldManualResult === false) && 
+                                                      (newManualResult === true || newManualResult === false);
+                                    
+                                    if (isChanging) {
+                                      return (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                          <label style={{ fontSize: '0.8rem', fontWeight: '500', display: 'block', marginBottom: '0.25rem' }}>
+                                            Reason for changing overall evidence result <span style={{ color: '#dc3545' }}>*</span>
+                                          </label>
+                                          <textarea
+                                            value={editedTestResults.evidence_result_change_comment || ''}
+                                            onChange={(e) => handleEvidenceCommentChange(e.target.value)}
+                                            placeholder="Please provide a reason for changing the overall evidence result..."
+                                            style={{
+                                              width: '100%',
+                                              fontSize: '0.8rem',
+                                              padding: '0.5rem',
+                                              border: '1px solid #dee2e6',
+                                              borderRadius: '0.25rem',
+                                              minHeight: '60px',
+                                              resize: 'vertical'
+                                            }}
+                                            required
+                                          />
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
                               </div>
                             )}
