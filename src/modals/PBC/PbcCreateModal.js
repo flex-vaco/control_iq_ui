@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner, Row, Col, ListGroup, Card, Accordion } from 'react-bootstrap';
+import AddEvidenceDocumentsModal from '../PeriodicTesting/AddEvidenceDocumentsModal';
 
 const PbcCreateModal = ({
   show,
@@ -20,23 +21,41 @@ const PbcCreateModal = ({
   existingDocuments = [],
   existingPolicyDocuments = [],
   loadingDocuments = false,
-  onDeleteDocument = null
+  onDeleteDocument = null,
+  onDeleteSample = null,
+  evidenceId = null,
+  onRefreshDocuments = null
 }) => {
   // Sample structure: { id, name, files: [], policyFlags: {} }
   const [samples, setSamples] = useState([{ id: 1, name: '', files: [], policyFlags: {} }]);
   const [activeAccordionKey, setActiveAccordionKey] = useState(null);
   const [activePolicyAccordionKey, setActivePolicyAccordionKey] = useState(null);
+  const [showAddDocumentsModal, setShowAddDocumentsModal] = useState(false);
+  const [selectedSampleForUpload, setSelectedSampleForUpload] = useState(null);
+
+  // Get unique sample names from existing documents
+  const existingSampleNames = React.useMemo(() => {
+    const allDocs = [...existingDocuments, ...existingPolicyDocuments];
+    const uniqueSamples = [...new Set(allDocs.map(doc => doc.sample_name).filter(Boolean))];
+    return uniqueSamples;
+  }, [existingDocuments, existingPolicyDocuments]);
   
   const testingStatuses = ['Pending', 'Partial Received', 'Received'];
   
   // Reset when modal opens/closes
   useEffect(() => {
     if (!show) {
-      setSamples([{ id: 1, name: '', files: [], policyFlags: {} }]);
+      // In edit mode, start with empty samples array (optional)
+      // In create mode, start with one sample (required)
+      if (mode === 'create') {
+        setSamples([{ id: 1, name: '', files: [], policyFlags: {} }]);
+      } else {
+        setSamples([]);
+      }
       setActiveAccordionKey(null);
       setActivePolicyAccordionKey(null);
     }
-  }, [show]);
+  }, [show, mode]);
 
   // Set default accordion keys when documents are loaded
   useEffect(() => {
@@ -294,7 +313,8 @@ const PbcCreateModal = ({
           <Form.Group className="mb-3">
             <div className="d-flex justify-content-between align-items-center mb-2">
               <Form.Label className="mb-0">
-                <strong>Samples</strong> {mode === 'edit' && (<span className="italic"> - You will have to re-test the newly uploaded document(s)</span>)}
+                <strong>Samples</strong> {mode === 'create' && <span className="text-danger">*</span>}
+                {mode === 'edit' && (<span className="text-muted ms-2">(Optional - You will have to re-test the newly uploaded document(s))</span>)}
               </Form.Label>
               <Button
                 variant="outline-primary"
@@ -307,7 +327,9 @@ const PbcCreateModal = ({
               </Button>
             </div>
             <Form.Text className="text-muted d-block mb-3">
-              Add samples with their documents. Each sample can have multiple documents.
+              {mode === 'create' 
+                ? 'Add samples with their documents. Each sample can have multiple documents.'
+                : 'Optionally add new samples with documents. You can also use "Add Documents to This Sample" button for existing samples.'}
             </Form.Text>
             
             {samples.map((sample, sampleIndex) => (
@@ -329,14 +351,14 @@ const PbcCreateModal = ({
                   </div>
                   
                   <Form.Group className="mb-3">
-                    <Form.Label>Sample Name <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>Sample Name {mode === 'create' && <span className="text-danger">*</span>}</Form.Label>
                     <Form.Control
                       type="text"
                       placeholder="e.g., Sample 1, Q1 Sample, etc."
                       value={sample.name}
                       onChange={(e) => updateSampleName(sample.id, e.target.value)}
                       disabled={loading}
-                      required
+                      required={mode === 'create'}
                     />
                   </Form.Group>
                   
@@ -409,9 +431,44 @@ const PbcCreateModal = ({
                         return (
                           <Accordion.Item eventKey={sampleName} key={sampleName}>
                             <Accordion.Header>
-                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                              <div className="d-flex justify-content-between align-items-center w-100 me-3">
+                                <div>
+                                  <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                                </div>
+                                {onDeleteSample && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-danger p-0 ms-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteSample(sampleName);
+                                    }}
+                                    disabled={loading}
+                                    title="Delete entire sample"
+                                  >
+                                    <i className="fas fa-trash"></i>
+                                  </Button>
+                                )}
+                              </div>
                             </Accordion.Header>
                             <Accordion.Body>
+                              {mode === 'edit' && evidenceId && (
+                                <div className="mb-3">
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedSampleForUpload(sampleName);
+                                      setShowAddDocumentsModal(true);
+                                    }}
+                                    disabled={loading}
+                                  >
+                                    <i className="fas fa-plus me-1"></i>
+                                    Add Documents to This Sample
+                                  </Button>
+                                </div>
+                              )}
                   <ListGroup>
                                 {sampleDocs.map((doc) => {
                       // Extract base URL (without /api) for serving static files
@@ -483,9 +540,44 @@ const PbcCreateModal = ({
                         return (
                           <Accordion.Item eventKey={sampleName} key={sampleName}>
                             <Accordion.Header>
-                              <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                              <div className="d-flex justify-content-between align-items-center w-100 me-3">
+                                <div>
+                                  <strong>{sampleName}</strong> <span className="ms-2 text-muted">({sampleDocs.length} document{sampleDocs.length !== 1 ? 's' : ''})</span>
+                                </div>
+                                {onDeleteSample && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-danger p-0 ms-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteSample(sampleName);
+                                    }}
+                                    disabled={loading}
+                                    title="Delete entire sample"
+                                  >
+                                    <i className="fas fa-trash"></i>
+                                  </Button>
+                                )}
+                              </div>
                             </Accordion.Header>
                             <Accordion.Body>
+                              {mode === 'edit' && evidenceId && (
+                                <div className="mb-3">
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedSampleForUpload(sampleName);
+                                      setShowAddDocumentsModal(true);
+                                    }}
+                                    disabled={loading}
+                                  >
+                                    <i className="fas fa-plus me-1"></i>
+                                    Add Documents to This Sample
+                                  </Button>
+                                </div>
+                              )}
                   <ListGroup>
                                 {sampleDocs.map((doc) => {
                       // Extract base URL (without /api) for serving static files
@@ -531,6 +623,28 @@ const PbcCreateModal = ({
                 )}
               </Form.Group>
             </>
+          )}
+
+          {/* Add Documents Modal */}
+          {mode === 'edit' && evidenceId && (
+            <AddEvidenceDocumentsModal
+              show={showAddDocumentsModal}
+              onHide={() => {
+                setShowAddDocumentsModal(false);
+                setSelectedSampleForUpload(null);
+                // Don't close the main modal - let user continue adding documents to other samples
+              }}
+              evidenceId={evidenceId}
+              existingSamples={existingSampleNames}
+              defaultSampleName={selectedSampleForUpload}
+              onSuccess={async () => {
+                // Refresh documents after successful upload
+                if (onRefreshDocuments) {
+                  await onRefreshDocuments();
+                }
+                // Modal will close itself via onHide, but main modal stays open
+              }}
+            />
           )}
 
           {/* Duplicate error message at bottom above button */}

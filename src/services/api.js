@@ -69,6 +69,10 @@ export const deleteEvidenceDocument = (documentId) => {
   return api.delete(`/data/pbc/documents/${documentId}`);
 };
 
+export const deleteSample = (evidenceId, sampleName) => {
+  return api.delete(`/data/pbc/${evidenceId}/sample`, { params: { sample_name: sampleName } });
+};
+
 export const createPbcRequest = (formData) => {
   return api.post('/data/pbc', formData, {
     headers: {
