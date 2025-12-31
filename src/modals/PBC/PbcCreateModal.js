@@ -314,7 +314,7 @@ const PbcCreateModal = ({
             <div className="d-flex justify-content-between align-items-center mb-2">
               <Form.Label className="mb-0">
                 <strong>Samples</strong> {mode === 'create' && <span className="text-danger">*</span>}
-                {mode === 'edit' && (<span className="text-muted ms-2">(Optional - You will have to re-test the newly uploaded document(s))</span>)}
+                
               </Form.Label>
               <Button
                 variant="outline-primary"
@@ -329,7 +329,13 @@ const PbcCreateModal = ({
             <Form.Text className="text-muted d-block mb-3">
               {mode === 'create' 
                 ? 'Add samples with their documents. Each sample can have multiple documents.'
-                : 'Optionally add new samples with documents. You can also use "Add Documents to This Sample" button for existing samples.'}
+                : (
+                  <>
+                    Optionally add new samples with documents. And ensure you've re-tested the newly uploaded ones.
+                    <br />
+                    You can also use "Add Documents to This Sample" button for adding to existing samples.
+                  </>
+                )}
             </Form.Text>
             
             {samples.map((sample, sampleIndex) => (
@@ -619,7 +625,7 @@ const PbcCreateModal = ({
                     </Accordion>
                   );
                 })() : (
-                  <Form.Text className="text-muted">No policy documents uploaded yet.</Form.Text>
+                  <Form.Text className="text-muted"> No policy documents uploaded yet.</Form.Text>
                 )}
               </Form.Group>
             </>
