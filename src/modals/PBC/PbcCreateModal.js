@@ -328,7 +328,7 @@ const PbcCreateModal = ({
             </div>
             <Form.Text className="text-muted d-block mb-3">
               {mode === 'create' 
-                ? 'Add samples with their documents. Each sample can have multiple documents.'
+                ? 'Add samples with evidence documents. Each sample can have multiple documents.'
                 : (
                   <>
                     Optionally add new samples with documents. And ensure you've re-tested the newly uploaded ones.
