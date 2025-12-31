@@ -1,25 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner, ListGroup } from 'react-bootstrap';
-import { api } from '../../services/api';
+import Swal from 'sweetalert2';
+import { api, getEvidenceDocuments, getPolicyDocuments } from '../../services/api';
 
 const AddEvidenceDocumentsModal = ({
   show,
   onHide,
   evidenceId,
   onSuccess,
-  loading = false
+  loading = false,
+  existingSamples = [],
+  defaultSampleName = null
 }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [policyDocumentFlags, setPolicyDocumentFlags] = useState({});
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedSampleName, setSelectedSampleName] = useState(defaultSampleName || '');
+  const [useExistingSample, setUseExistingSample] = useState(!!defaultSampleName);
 
   useEffect(() => {
     if (!show) {
       setSelectedFiles([]);
       setPolicyDocumentFlags({});
+      setSelectedSampleName(defaultSampleName || '');
+      setUseExistingSample(!!defaultSampleName);
+    } else if (defaultSampleName) {
+      setSelectedSampleName(defaultSampleName);
+      setUseExistingSample(true);
     }
-  }, [show]);
+  }, [show, defaultSampleName]);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -47,12 +57,15 @@ const AddEvidenceDocumentsModal = ({
     try {
       const formData = new FormData();
       
-      // Append all selected files and policy flags
+      // Append all selected files, policy flags, and sample names
       selectedFiles.forEach((file, index) => {
         formData.append('documents', file);
         // Append policy flag for each file
         const isPolicy = policyDocumentFlags[index] || false;
         formData.append('is_policy_document', isPolicy);
+        // Append sample_name for each file (use selected sample name if using existing sample)
+        const sampleName = useExistingSample && selectedSampleName ? selectedSampleName : '';
+        formData.append('sample_names', sampleName);
       });
       // eslint-disable-next-line no-unused-vars
       const response = await api.post(`/data/pbc/${evidenceId}/add-documents`, formData, {
@@ -61,16 +74,27 @@ const AddEvidenceDocumentsModal = ({
         }
       });
 
+      // Show success message
+      await Swal.fire({
+        icon: 'success',
+        title: 'Documents Uploaded!',
+        text: `${selectedFiles.length} document(s) uploaded successfully. You can continue adding documents to other samples.`,
+        confirmButtonColor: '#286070',
+        timer: 2000,
+        timerProgressBar: true
+      });
+
       // Reset form
       setSelectedFiles([]);
+      setPolicyDocumentFlags({});
       setError('');
       
       // Call success callback to refresh data
       if (onSuccess) {
-        onSuccess();
+        await onSuccess();
       }
       
-      // Close modal
+      // Close only this modal (not the parent modal)
       onHide();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'An error occurred while uploading documents.');
@@ -99,6 +123,56 @@ const AddEvidenceDocumentsModal = ({
             <Alert variant="danger" className="mb-3">
               {error}
             </Alert>
+          )}
+
+          {existingSamples.length > 0 && (
+            <Form.Group className="mb-3">
+              <Form.Label>Add to Existing Sample</Form.Label>
+              <Form.Check
+                type="switch"
+                id="useExistingSample"
+                label="Upload to an existing sample"
+                checked={useExistingSample}
+                onChange={(e) => {
+                  setUseExistingSample(e.target.checked);
+                  if (!e.target.checked) {
+                    setSelectedSampleName('');
+                  }
+                }}
+                disabled={uploading || loading}
+              />
+              {useExistingSample && (
+                <Form.Select
+                  value={selectedSampleName}
+                  onChange={(e) => setSelectedSampleName(e.target.value)}
+                  disabled={uploading || loading}
+                  className="mt-2"
+                >
+                  <option value="">Select a sample...</option>
+                  {existingSamples.map((sample) => (
+                    <option key={sample} value={sample}>
+                      {sample}
+                    </option>
+                  ))}
+                </Form.Select>
+              )}
+            </Form.Group>
+          )}
+
+          {!useExistingSample && (
+            <Form.Group className="mb-3">
+              <Form.Label>Sample Name (Optional)</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Enter sample name for new sample"
+                value={selectedSampleName}
+                onChange={(e) => setSelectedSampleName(e.target.value)}
+                disabled={uploading || loading}
+              />
+              <Form.Text className="text-muted">
+                Leave empty to create documents without a sample name.
+              </Form.Text>
+            </Form.Group>
           )}
 
           <Form.Group controlId="documentUpload">

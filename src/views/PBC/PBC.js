@@ -3,7 +3,7 @@ import { Button, Spinner, Form, Card } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { useAuth } from '../../context/AuthContext';
 import DynamicTable from '../../components/DynamicTable';
-import { getPbcData, getRcmControls, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, getPolicyDocuments, deleteEvidenceDocument, getAllTenants } from '../../services/api';
+import { getPbcData, getRcmControls, getClientsForDropdown, api, checkDuplicatePbc, getEvidenceDocuments, getPolicyDocuments, deleteEvidenceDocument, deleteSample, getAllTenants } from '../../services/api';
 import PbcCreateModal from '../../modals/PBC/PbcCreateModal';
 
 const PBC = () => {
@@ -380,6 +380,59 @@ const PBC = () => {
     }
   };
 
+  const handleDeleteSample = async (sampleName) => {
+    if (!selectedPbc || !selectedPbc.evidence_id) {
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete the entire sample "${sampleName}" and all its documents?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    setLoadingDocuments(true);
+    try {
+      await deleteSample(selectedPbc.evidence_id, sampleName);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Sample and all its documents have been deleted successfully.',
+        confirmButtonColor: '#286070'
+      });
+      
+      // Refresh the documents list
+      const [evidenceResponse, policyResponse] = await Promise.all([
+        getEvidenceDocuments(selectedPbc.evidence_id),
+        getPolicyDocuments(selectedPbc.evidence_id)
+      ]);
+      setExistingDocuments(evidenceResponse.data || []);
+      setExistingPolicyDocuments(policyResponse.data || []);
+      
+      // Refresh the table to update document count
+      fetchPbcData();
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Failed to delete sample.',
+        confirmButtonColor: '#286070'
+      });
+      console.error(err);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const handleSubmit = async (e, customFormData = null) => {
     e.preventDefault();
     
@@ -589,6 +642,25 @@ const PBC = () => {
         existingPolicyDocuments={existingPolicyDocuments}
         loadingDocuments={loadingDocuments}
         onDeleteDocument={modalMode === 'edit' ? handleDeleteDocument : null}
+        onDeleteSample={modalMode === 'edit' ? handleDeleteSample : null}
+        evidenceId={modalMode === 'edit' && selectedPbc ? selectedPbc.evidence_id : null}
+        onRefreshDocuments={async () => {
+          if (selectedPbc && selectedPbc.evidence_id) {
+            setLoadingDocuments(true);
+            try {
+              const [evidenceResponse, policyResponse] = await Promise.all([
+                getEvidenceDocuments(selectedPbc.evidence_id),
+                getPolicyDocuments(selectedPbc.evidence_id)
+              ]);
+              setExistingDocuments(evidenceResponse.data || []);
+              setExistingPolicyDocuments(policyResponse.data || []);
+            } catch (err) {
+              console.error('Failed to refresh documents:', err);
+            } finally {
+              setLoadingDocuments(false);
+            }
+          }
+        }}
       />
     </div>
   );
