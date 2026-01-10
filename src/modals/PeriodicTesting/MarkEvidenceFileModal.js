@@ -5,7 +5,7 @@ import { api, updateTestExecutionEvidenceResult, checkTestExecutionEvidence } fr
 import ImageEditor from '../../components/PeriodicTesting/ImageEditor';
 import PDFEditor from '../../components/PeriodicTesting/PDFEditor';
 
-const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmDetails, existingTestResult }) => {
+const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmDetails, existingTestResult, onResultsSaved }) => {
   const [expandedSections, setExpandedSections] = useState({
     evidenceDetails: true,
     testResults: false
@@ -420,10 +420,20 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     const oldAttr = updated.attributes_results[index];
     const oldValue = oldAttr.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr.result;
     
-    // Check if result is changing from pass to fail or fail to pass
-    const isChanging = (oldValue === true && newValue === false) || (oldValue === false && newValue === true);
+    // Convert string to appropriate value (true, false, or null for NA)
+    let parsedValue = null;
+    if (newValue === 'true') {
+      parsedValue = true;
+    } else if (newValue === 'false') {
+      parsedValue = false;
+    } else {
+      parsedValue = null; // NA
+    }
     
-    updated.attributes_results[index].attribute_final_result = newValue;
+    // Check if result is changing from pass to fail or fail to pass (excluding NA)
+    const isChanging = (oldValue === true && parsedValue === false) || (oldValue === false && parsedValue === true);
+    
+    updated.attributes_results[index].attribute_final_result = parsedValue;
     
     // If changing result, require comment (clear existing if not changing)
     if (isChanging) {
@@ -436,7 +446,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       updated.attributes_results[index].attribute_result_change_comment = '';
     }
     
-    // Recalculate totals
+    // Recalculate totals (only count true/false, exclude null/NA)
     const passed = updated.attributes_results.filter(attr => attr.attribute_final_result === true).length;
     const failed = updated.attributes_results.filter(attr => attr.attribute_final_result === false).length;
     updated.total_attributes_passed = passed;
@@ -488,6 +498,14 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
     setEditedTestResults(updated);
   };
 
+  const handleSummaryChange = (summary) => {
+    if (!editedTestResults) return;
+    
+    const updated = JSON.parse(JSON.stringify(editedTestResults));
+    updated.summary = summary;
+    setEditedTestResults(updated);
+  };
+
   const handleSaveResults = async () => {
     if (!editedTestResults || !testExecution || !documentData) {
       Swal.fire({
@@ -520,8 +538,12 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
           const oldValue = oldAttr.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr.result;
           const newValue = attr.attribute_final_result;
           
-          // Check if result changed from pass to fail or fail to pass
-          if (oldValue !== newValue && (oldValue === true || oldValue === false) && (newValue === true || newValue === false)) {
+          // Check if result changed from pass to fail or fail to pass (excluding NA/null)
+          if (oldValue !== newValue && 
+              oldValue !== null && oldValue !== undefined && 
+              newValue !== null && newValue !== undefined &&
+              (oldValue === true || oldValue === false) && 
+              (newValue === true || newValue === false)) {
             // Require comment when changing result
             if (!attr.attribute_result_change_comment || attr.attribute_result_change_comment.trim() === '') {
               Swal.fire({
@@ -571,9 +593,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
         documentData.document_id
       );
 
+      let updatedData = null;
+      let parsedResult = null;
+      
       if (refreshResponse.data.exists) {
-        const updatedData = refreshResponse.data.data;
-        let parsedResult = null;
+        updatedData = refreshResponse.data.data;
         try {
           if (typeof updatedData.result === 'string') {
             parsedResult = JSON.parse(updatedData.result);
@@ -595,6 +619,11 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
       } else {
         // Fallback: use edited results
         setTestResults(JSON.parse(JSON.stringify(editedTestResults)));
+      }
+
+      // Notify parent component to refresh data
+      if (onResultsSaved && updatedData) {
+        onResultsSaved(updatedData);
       }
 
       Swal.fire({
@@ -776,6 +805,24 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                           <div>
                             {editedTestResults.attributes_results.map((attr, index) => {
                               const displayResult = attr.attribute_final_result !== undefined ? attr.attribute_final_result : attr.result;
+                              const isNA = displayResult === null || displayResult === undefined;
+                              const isPass = displayResult === true;
+                              const isFail = displayResult === false;
+                              
+                              // Get display value for select
+                              let selectValue = 'na';
+                              if (attr.attribute_final_result !== undefined) {
+                                if (attr.attribute_final_result === true) {
+                                  selectValue = 'true';
+                                } else if (attr.attribute_final_result === false) {
+                                  selectValue = 'false';
+                                } else {
+                                  selectValue = 'na';
+                                }
+                              } else if (attr.result !== undefined) {
+                                selectValue = attr.result ? 'true' : 'false';
+                              }
+                              
                               return (
                               <div key={index} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '0.25rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
@@ -785,15 +832,15 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                     fontSize: '0.8rem', 
                                     padding: '0.25rem 0.5rem', 
                                     borderRadius: '0.25rem',
-                                        backgroundColor: displayResult ? '#d4edda' : '#f8d7da',
-                                        color: displayResult ? '#155724' : '#721c24'
+                                        backgroundColor: isNA ? '#e9ecef' : (isPass ? '#d4edda' : '#f8d7da'),
+                                        color: isNA ? '#495057' : (isPass ? '#155724' : '#721c24')
                                   }}>
-                                        {displayResult ? 'Pass' : 'Fail'}
+                                        {isNA ? 'NA' : (isPass ? 'Pass' : 'Fail')}
                                   </span>
                                       {!isTestExecutionCompleted && (
                                         <select
-                                          value={attr.attribute_final_result !== undefined ? (attr.attribute_final_result ? 'true' : 'false') : (attr.result ? 'true' : 'false')}
-                                          onChange={(e) => handleAttributeResultChange(index, e.target.value === 'true')}
+                                          value={selectValue}
+                                          onChange={(e) => handleAttributeResultChange(index, e.target.value)}
                                           style={{
                                             fontSize: '0.8rem',
                                             padding: '0.25rem 0.5rem',
@@ -804,6 +851,7 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                         >
                                           <option value="true">Pass</option>
                                           <option value="false">Fail</option>
+                                          <option value="na">NA</option>
                                         </select>
                                       )}
                                     </div>
@@ -823,12 +871,14 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                                     {attr.reason}
                                   </p>
                                 )}
-                                {/* Show comment input if result is being changed */}
+                                {/* Show comment input if result is being changed (pass to fail or fail to pass, excluding NA) */}
                                 {!isTestExecutionCompleted && (() => {
                                   const oldAttr = testResults?.attributes_results?.[index];
                                   const oldValue = oldAttr?.attribute_final_result !== undefined ? oldAttr.attribute_final_result : oldAttr?.result;
                                   const newValue = attr.attribute_final_result;
-                                  const isChanging = oldValue !== undefined && oldValue !== newValue && 
+                                  // Only require comment when changing between pass and fail (not when changing to/from NA)
+                                  const isChanging = oldValue !== undefined && oldValue !== null && newValue !== undefined && newValue !== null &&
+                                                    oldValue !== newValue && 
                                                     (oldValue === true || oldValue === false) && 
                                                     (newValue === true || newValue === false);
                                   
@@ -861,12 +911,36 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                               </div>
                               );
                             })}
-                            {editedTestResults.summary && (
-                              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#e9ecef', borderRadius: '0.25rem' }}>
-                                <strong>Summary:</strong>
-                                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>{editedTestResults.summary}</p>
+                            <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#e9ecef', borderRadius: '0.25rem' }}>
+                              <div style={{ marginBottom: '0.5rem' }}>
+                                <strong>Overall Summary:</strong>
                               </div>
-                            )}
+                              {!isTestExecutionCompleted ? (
+                                <textarea
+                                  value={editedTestResults.summary || ''}
+                                  onChange={(e) => handleSummaryChange(e.target.value)}
+                                  placeholder="Enter overall summary..."
+                                  style={{
+                                    width: '100%',
+                                    fontSize: '0.9rem',
+                                    padding: '0.5rem',
+                                    border: '1px solid #dee2e6',
+                                    borderRadius: '0.25rem',
+                                    minHeight: '100px',
+                                    resize: 'vertical',
+                                    fontFamily: 'inherit'
+                                  }}
+                                />
+                              ) : (
+                                editedTestResults.summary ? (
+                                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{editedTestResults.summary}</p>
+                                ) : (
+                                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#6c757d', fontStyle: 'italic' }}>
+                                    No summary available.
+                                  </p>
+                                )
+                              )}
+                            </div>
                             {(editedTestResults.total_attributes !== undefined || editedTestResults.total_attributes_passed !== undefined || editedTestResults.total_attributes_failed !== undefined) && (
                               <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#6c757d' }}>
                                 <p style={{ margin: '0.25rem 0' }}>

@@ -1039,6 +1039,8 @@ const TestExecutionDetails = () => {
                     status: response.data.data.status
                   }
                 }));
+                // Update existingTestResult if modal is still open
+                setExistingTestResult(response.data.data);
               }
             }).catch(err => console.error('Error refreshing status:', err));
             
@@ -1048,6 +1050,31 @@ const TestExecutionDetails = () => {
                 setReportData(reportResponse.data.data || []);
               })
               .catch(err => console.error('Error refreshing report data:', err));
+          }
+        }}
+        onResultsSaved={async (updatedData) => {
+          // Refresh data immediately after save
+          const currentDocId = selectedDocument?.document_id;
+          if (currentDocId && testExecution) {
+            try {
+              // Update existingTestResult with fresh data
+              setExistingTestResult(updatedData);
+              
+              // Refresh evidence status map
+              setEvidenceStatusMap(prev => ({
+                ...prev,
+                [currentDocId]: {
+                  exists: true,
+                  status: updatedData.status
+                }
+              }));
+              
+              // Refresh report data
+              const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+              setReportData(reportResponse.data.data || []);
+            } catch (err) {
+              console.error('Error refreshing data after save:', err);
+            }
           }
         }}
         documentData={selectedDocument}
