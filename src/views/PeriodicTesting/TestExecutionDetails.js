@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner, Accordion } from 'react-bootstrap';
-import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences } from '../../services/api';
+import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences, updateTestExecutionPrompt } from '../../services/api';
 import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
 import Swal from 'sweetalert2';
@@ -40,6 +40,8 @@ const TestExecutionDetails = () => {
   const [pendingTestResult, setPendingTestResult] = useState(null); // Store pending result change
   const [activeAccordionKey, setActiveAccordionKey] = useState(null); // Active accordion key for sample grouping
   const [evaluatingSample, setEvaluatingSample] = useState(null); // Track which sample is being evaluated
+  const [showPromptModal, setShowPromptModal] = useState(false); // Show prompt edit modal
+  const [promptText, setPromptText] = useState(''); // Current prompt text
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -128,6 +130,13 @@ const TestExecutionDetails = () => {
 
     fetchDetails();
   }, [id]);
+
+  // Set prompt text when test execution is loaded
+  useEffect(() => {
+    if (testExecution) {
+      setPromptText(testExecution.ai_prompt_text || '');
+    }
+  }, [testExecution]);
 
   // Set default active accordion key when evidence documents change
   useEffect(() => {
@@ -464,6 +473,17 @@ const TestExecutionDetails = () => {
             <h6 className="mb-0">Test Execution Details</h6>
             {testExecution.status !== 'completed' && (
               <div className="d-flex gap-2">
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  onClick={() => {
+                    setPromptText(testExecution.ai_prompt_text || '');
+                    setShowPromptModal(true);
+                  }}
+                  title="Edit AI Prompt"
+                >
+                  <i className="fas fa-edit me-1"></i> Edit AI Prompt
+                </Button>
                 <select
                   value={testExecution.status || 'pending'}
                   onChange={async (e) => {
@@ -1039,6 +1059,8 @@ const TestExecutionDetails = () => {
                     status: response.data.data.status
                   }
                 }));
+                // Update existingTestResult if modal is still open
+                setExistingTestResult(response.data.data);
               }
             }).catch(err => console.error('Error refreshing status:', err));
             
@@ -1048,6 +1070,31 @@ const TestExecutionDetails = () => {
                 setReportData(reportResponse.data.data || []);
               })
               .catch(err => console.error('Error refreshing report data:', err));
+          }
+        }}
+        onResultsSaved={async (updatedData) => {
+          // Refresh data immediately after save
+          const currentDocId = selectedDocument?.document_id;
+          if (currentDocId && testExecution) {
+            try {
+              // Update existingTestResult with fresh data
+              setExistingTestResult(updatedData);
+              
+              // Refresh evidence status map
+              setEvidenceStatusMap(prev => ({
+                ...prev,
+                [currentDocId]: {
+                  exists: true,
+                  status: updatedData.status
+                }
+              }));
+              
+              // Refresh report data
+              const reportResponse = await getTestExecutionEvidenceDocuments(testExecution.test_execution_id);
+              setReportData(reportResponse.data.data || []);
+            } catch (err) {
+              console.error('Error refreshing data after save:', err);
+            }
           }
         }}
         documentData={selectedDocument}
@@ -1163,6 +1210,141 @@ const TestExecutionDetails = () => {
         evaluatingAll={evaluatingAll}
         sampleName={evaluatingSample}
       />
+
+      {/* AI Prompt Edit Modal */}
+      {showPromptModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1050
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '2rem',
+            borderRadius: '0.5rem',
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h5 className="mb-3">Edit AI Prompt</h5>
+            <p className="text-muted mb-3">
+              Enter the AI prompt text that will be used for attribute comparison. If left empty, a default prompt will be used.
+            </p>
+            <textarea
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              placeholder="Enter AI prompt text... (Leave empty to use default prompt)"
+              style={{
+                width: '100%',
+                minHeight: '300px',
+                padding: '0.75rem',
+                border: '1px solid #dee2e6',
+                borderRadius: '0.25rem',
+                fontSize: '0.9rem',
+                fontFamily: 'monospace',
+                resize: 'vertical'
+              }}
+            />
+            <div className="mt-3 d-flex justify-content-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowPromptModal(false);
+                  setPromptText(testExecution.ai_prompt_text || '');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  const newPromptText = promptText.trim() === '' ? null : promptText.trim();
+                  const currentPromptText = testExecution.ai_prompt_text || null;
+                  
+                  // Check if prompt is changing
+                  if (newPromptText !== currentPromptText) {
+                    // Check if there are existing test results
+                    const hasResults = reportData && reportData.length > 0;
+                    
+                    if (hasResults) {
+                      const result = await Swal.fire({
+                        title: 'Change AI Prompt?',
+                        html: `
+                          <p>Changing the AI prompt will clear all existing test results.</p>
+                          <p><strong>You will need to re-test all evidence documents.</strong></p>
+                          <p>Are you sure you want to continue?</p>
+                        `,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#dc3545',
+                        cancelButtonColor: '#6c757d',
+                        confirmButtonText: 'Yes, change prompt and clear results',
+                        cancelButtonText: 'Cancel'
+                      });
+                      
+                      if (!result.isConfirmed) {
+                        return;
+                      }
+                    }
+                    
+                    try {
+                      const response = await updateTestExecutionPrompt({
+                        test_execution_id: testExecution.test_execution_id,
+                        ai_prompt_text: newPromptText
+                      });
+                      
+                      // Refresh test execution data
+                      const refreshResponse = await getTestExecutionById(id);
+                      setTestExecution(refreshResponse.data.test_execution);
+                      
+                      // Clear report data if results were cleared
+                      if (hasResults && response.data.results_cleared) {
+                        setReportData([]);
+                        setEvidenceStatusMap({});
+                        Swal.fire({
+                          icon: 'success',
+                          title: 'Prompt Updated',
+                          text: 'AI prompt has been updated. All test results have been cleared. Please re-test all evidence documents.',
+                          confirmButtonColor: '#286070'
+                        });
+                      } else {
+                        Swal.fire({
+                          icon: 'success',
+                          title: 'Prompt Updated',
+                          text: 'AI prompt has been updated successfully.',
+                          confirmButtonColor: '#286070'
+                        });
+                      }
+                      
+                      setShowPromptModal(false);
+                    } catch (error) {
+                      console.error('Error updating prompt:', error);
+                      Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: error.response?.data?.message || 'Failed to update prompt. Please try again.',
+                        confirmButtonColor: '#286070'
+                      });
+                    }
+                  } else {
+                    setShowPromptModal(false);
+                  }
+                }}
+              >
+                Save Prompt
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Container>
   );
 };

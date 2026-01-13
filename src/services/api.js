@@ -163,6 +163,10 @@ export const updateTestExecutionStatusAndResult = (data) => {
   return api.put('/data/test-executions/status-result', data);
 };
 
+export const updateTestExecutionPrompt = (data) => {
+  return api.put('/data/test-executions/prompt', data);
+};
+
 export const evaluateAllEvidences = (data) => {
   return api.post('/data/evaluate-all-evidences', data);
 };
@@ -240,27 +244,4 @@ export const getAvailableResources = () => {
 
 export const getAllTenants = () => {
   return api.get('/data/permissions/tenants');
-};
-
-// AI Prompts Services
-export const getAiPrompts = (clientId, tenantId = null) => {
-  const params = { client_id: clientId };
-  if (tenantId) params.tenant_id = tenantId;
-  return api.get('/data/ai-prompts', { params });
-};
-
-export const getAiPromptById = (id) => {
-  return api.get(`/data/ai-prompts/${id}`);
-};
-
-export const createAiPrompt = (promptData) => {
-  return api.post('/data/ai-prompts', promptData);
-};
-
-export const updateAiPrompt = (id, promptData) => {
-  return api.put(`/data/ai-prompts/${id}`, promptData);
-};
-
-export const deleteAiPrompt = (id) => {
-  return api.delete(`/data/ai-prompts/${id}`);
 };

@@ -16,7 +16,6 @@ import TestExecutionDetails from './views/PeriodicTesting/TestExecutionDetails';
 import UserManagement from './views/UserManagement/UserManagement';
 import RoleManagement from './views/RoleManagement/RoleManagement';
 import AccessControl from './views/AccessControl/AccessControl';
-import AIPrompts from './views/AIPrompts/AIPrompts';
 // --- END OF UPDATES ---
 
 function App() {
@@ -33,7 +32,6 @@ function App() {
           <Route path="/rcm" element={<RCM />} />
           <Route path="/pbc" element={<PBC />} />
           <Route path="/attributes" element={<Attributes />} />
-          <Route path="/ai-prompts" element={<AIPrompts />} />
           <Route path="/client" element={<Client />} />
           <Route path="/periodic-testing" element={<PeriodicTesting />} />
           <Route path="/periodic-testing/:id" element={<TestExecutionDetails />} />
