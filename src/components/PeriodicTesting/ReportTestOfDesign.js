@@ -57,16 +57,6 @@ const ReportTestOfDesign = ({ testExecution, rcmDetails, testAttributes = [], ev
       }
     ];
 
-  const exposedIssues = [
-    { 
-      issue: 'Issue 1', 
-      summary: 'High', 
-      status: 'Open', 
-      actionPlanDescription: 'Team A', 
-      actionPlanOwner: '2024-02-01'
-    }
-  ];
-
   const testOfDesignTools = [
     { tool: '', minimumLength: '', complexityEnabled: '' },
     { tool: '', minimumLength: '', complexityEnabled: '' }

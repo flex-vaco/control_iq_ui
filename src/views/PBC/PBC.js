@@ -10,7 +10,6 @@ const PBC = () => {
   const { user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.roleId === 1;
   const [pbcData, setPbcData] = useState([]);
-  const [filteredPbcData, setFilteredPbcData] = useState([]);
   const [rcmControls, setRcmControls] = useState([]);
   const [loading, setLoading] = useState(false);
   // eslint-disable-next-line no-unused-vars
@@ -53,7 +52,7 @@ const PBC = () => {
     }
   };
 
-  const fetchPbcData = async (clientId = null) => {
+  const fetchPbcData = async (clientId = null) => { // eslint-disable-line no-unused-vars
     setLoading(true);
     setError('');
     try {
@@ -130,7 +129,7 @@ const PBC = () => {
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    if (selectedTenantFilter) {
+    if (selectedTenantFilter) { // eslint-disable-line no-unused-vars
       fetchPbcData();
     } else if (isSuperAdmin) {
       fetchPbcData();
