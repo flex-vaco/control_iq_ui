@@ -807,7 +807,6 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
                               const displayResult = attr.attribute_final_result !== undefined ? attr.attribute_final_result : attr.result;
                               const isNA = displayResult === null || displayResult === undefined;
                               const isPass = displayResult === true;
-                              const isFail = displayResult === false;
                               
                               // Get display value for select
                               let selectValue = 'na';
@@ -1127,7 +1126,6 @@ const MarkEvidenceFileModal = ({ show, onHide, documentData, testExecution, rcmD
           <div
             style={{ 
               backgroundColor: 'white',
-              overflow: 'hidden',
               height: '100%',
               display: 'flex',
               flexDirection: 'column',

@@ -663,7 +663,6 @@ const EvaluateAllModal = ({ show, onHide, testExecution, rcmDetails, testAttribu
           <div
             style={{ 
               backgroundColor: 'white',
-              overflow: 'hidden',
               height: '100%',
               display: 'flex',
               flexDirection: 'column',

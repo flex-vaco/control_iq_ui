@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Tabs, Tab, Table, Button, Alert, Spinner, Accordion } from 'react-bootstrap';
 import { getTestExecutionById, checkTestExecutionEvidence, getTestExecutionEvidenceDocuments, updateTestExecutionStatusAndResult, evaluateAllEvidences, updateTestExecutionPrompt } from '../../services/api';
-import { getPolicyDocuments } from '../../services/api';
 import { api } from '../../services/api';
 import Swal from 'sweetalert2';
 import MarkEvidenceFileModal from '../../modals/PeriodicTesting/MarkEvidenceFileModal';
 import ReportModal from '../../modals/PeriodicTesting/ReportModal';
 import AddEvidenceDocumentsModal from '../../modals/PeriodicTesting/AddEvidenceDocumentsModal';
 import EvaluateAllModal from '../../modals/PeriodicTesting/EvaluateAllModal';
+
+// Default prompt text used when no custom prompt is set
+const DEFAULT_PROMPT = `- Understand the context and meaning of both evidence and requirements
+- Match based on semantic meaning, not exact text
+- Consider synonyms, equivalent terms, and policy variations`;
 
 const TestExecutionDetails = () => {
   const { id } = useParams();
@@ -41,7 +45,7 @@ const TestExecutionDetails = () => {
   const [activeAccordionKey, setActiveAccordionKey] = useState(null); // Active accordion key for sample grouping
   const [evaluatingSample, setEvaluatingSample] = useState(null); // Track which sample is being evaluated
   const [showPromptModal, setShowPromptModal] = useState(false); // Show prompt edit modal
-  const [promptText, setPromptText] = useState(''); // Current prompt text
+  const [promptText, setPromptText] = useState(DEFAULT_PROMPT); // Current prompt text
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -134,7 +138,7 @@ const TestExecutionDetails = () => {
   // Set prompt text when test execution is loaded
   useEffect(() => {
     if (testExecution) {
-      setPromptText(testExecution.ai_prompt_text || '');
+      setPromptText(testExecution.ai_prompt_text || DEFAULT_PROMPT);
     }
   }, [testExecution]);
 
@@ -477,10 +481,15 @@ const TestExecutionDetails = () => {
                   variant="outline-primary"
                   size="sm"
                   onClick={() => {
-                    setPromptText(testExecution.ai_prompt_text || '');
+                    setPromptText(testExecution.ai_prompt_text || DEFAULT_PROMPT);
                     setShowPromptModal(true);
                   }}
                   title="Edit AI Prompt"
+                  style={{
+                    backgroundColor: '#fff',
+                    color: '#000',
+                    border: '1px solid #dee2e6'
+                  }}
                 >
                   <i className="fas fa-edit me-1"></i> Edit AI Prompt
                 </Button>
@@ -1241,7 +1250,7 @@ const TestExecutionDetails = () => {
             <textarea
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
-              placeholder="Enter AI prompt text... (Leave empty to use default prompt)"
+              placeholder="Enter AI prompt text..."
               style={{
                 width: '100%',
                 minHeight: '300px',
@@ -1258,7 +1267,7 @@ const TestExecutionDetails = () => {
                 variant="secondary"
                 onClick={() => {
                   setShowPromptModal(false);
-                  setPromptText(testExecution.ai_prompt_text || '');
+                  setPromptText(testExecution.ai_prompt_text || DEFAULT_PROMPT);
                 }}
               >
                 Cancel
@@ -1266,7 +1275,9 @@ const TestExecutionDetails = () => {
               <Button
                 variant="primary"
                 onClick={async () => {
-                  const newPromptText = promptText.trim() === '' ? null : promptText.trim();
+                  // If prompt matches default exactly, save as null to use default
+                  const trimmedPrompt = promptText.trim();
+                  const newPromptText = trimmedPrompt === '' || trimmedPrompt === DEFAULT_PROMPT.trim() ? null : trimmedPrompt;
                   const currentPromptText = testExecution.ai_prompt_text || null;
                   
                   // Check if prompt is changing

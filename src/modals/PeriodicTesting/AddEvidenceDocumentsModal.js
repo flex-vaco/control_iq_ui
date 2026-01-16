@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner, ListGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
-import { api, getEvidenceDocuments, getPolicyDocuments } from '../../services/api';
+import { api } from '../../services/api';
 
 const AddEvidenceDocumentsModal = ({
   show,

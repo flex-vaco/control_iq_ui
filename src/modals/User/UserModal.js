@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Button, Alert } from 'react-bootstrap';
+import { Modal, Form, Button } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 
 const UserModal = ({ show, onHide, onSubmit, user, roles, tenants, loading }) => {
