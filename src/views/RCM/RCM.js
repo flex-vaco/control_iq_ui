@@ -147,6 +147,35 @@ const RCM = () => {
     });
   };
 
+  const downloadSampleFile = () => {
+    const sampleData = [
+      {
+        'Control UID': 'CTRL-001',
+        'Process': 'Sample Process',
+        'Sub Process': 'Sample Sub Process',
+        'Risk ID': 'RISK-001',
+        'Risk Description': 'Sample risk description',
+        'Classification': 'Key',
+        'Control Description': 'Sample control description',
+        'Summary': 'Sample summary',
+        'Frequency': 'Monthly',
+        'Automated/Manual': 'Manual',
+        'Preventive/Detective': 'Preventive',
+        'Significance': 'High',
+        'Risk Rating': 'Medium',
+        'Owners': 'Sample Owner',
+        'Mitigates': 'Sample risk',
+        'Location': 'HQ',
+        'Key Reports': 'Report A',
+        'IT Systems': 'System A',
+      },
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'RCM');
+    XLSX.writeFile(workbook, 'rcm_import_sample.xlsx');
+  };
+
   // CSV parsing function
   const parseCSV = (text) => {
     const lines = text.split('\n').filter(line => line.trim());
@@ -678,6 +707,7 @@ const RCM = () => {
         clients={clients}
         selectedClientId={selectedClientId}
         onClientChange={(e) => setSelectedClientId(e.target.value)}
+        onDownloadSample={downloadSampleFile}
       />
     </div>
   );
