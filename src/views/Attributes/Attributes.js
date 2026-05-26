@@ -95,6 +95,21 @@ const Attributes = () => {
     });
   };
 
+  const downloadSampleFile = () => {
+    const sampleData = [
+      {
+        'Control UID': 'CTRL-001',
+        'Attribute Name': 'Sample Attribute',
+        'Attribute Description': 'Brief description of the test attribute',
+        'Test Steps': '1. Step one\n2. Step two',
+      },
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Attributes');
+    XLSX.writeFile(workbook, 'attributes_import_sample.xlsx');
+  };
+
   // CSV parsing function
   const parseCSV = (text) => {
     const lines = text.split('\n').filter(line => line.trim());
@@ -562,6 +577,7 @@ const Attributes = () => {
         clients={clients}
         selectedClientId={selectedClientId}
         onClientChange={(e) => setSelectedClientId(e.target.value)}
+        onDownloadSample={downloadSampleFile}
       />
     </div>
   );

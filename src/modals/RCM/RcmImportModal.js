@@ -16,7 +16,8 @@ const RcmImportModal = ({
   onInputChange,
   clients,
   selectedClientId,
-  onClientChange
+  onClientChange,
+  onDownloadSample
 }) => {
   // Key fields to display in preview (most important ones)
   const keyFields = [
@@ -37,6 +38,21 @@ const RcmImportModal = ({
             <>
               <Alert variant="info">
                 Upload the file first to preview the data before submitting.
+                {onDownloadSample && (
+                  <>
+                    {' '}
+                    <Button
+                      variant="link"
+                      className="p-0 align-baseline"
+                      onClick={onDownloadSample}
+                      id="download-rcm-sample-button"
+                    >
+                      Download sample file
+                    </Button>
+                    {' '}
+                    (.xlsx template with all RCM import columns. Control UID is required for each row).
+                  </>
+                )}
               </Alert>
             </>
           )}
