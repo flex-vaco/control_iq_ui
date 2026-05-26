@@ -1,26 +1,18 @@
 import axios from 'axios';
 
-// Create an axios instance
+// Create an axios instance — withCredentials sends the httpOnly session cookie automatically
 export const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Function to set the auth token on the api instance
-export const setAuthToken = (token) => {
-  if (token) {
-    api.defaults.headers.common['Authorization'] = token;
-  } else {
-    delete api.defaults.headers.common['Authorization'];
-  }
-};
-
-// --- Auth Service ---
-export const loginUser = (credentials) => {
-  return api.post('/auth/login', credentials);
-};
+// --- Auth Services ---
+export const loginUser = (credentials) => api.post('/auth/login', credentials);
+export const getCurrentUser = () => api.get('/auth/me');
+export const logoutUser = () => api.post('/auth/logout');
 
 // --- Data Services ---
 export const getRcmData = (clientId = null, tenantId = null) => {

@@ -22,7 +22,7 @@ const Login = () => {
       const response = await loginUser({ email, password });
       
       if (response.data.success) {
-        login(response.data.user, response.data.token);
+        login(response.data.user);
       }
     } catch (err) {
       const message = err.response?.data?.message || 'Login failed. Please try again.';

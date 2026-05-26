@@ -1,22 +1,23 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
-// Prevent sweetalert2 from trying to render in jsdom
 jest.mock('sweetalert2', () => ({
   fire: jest.fn().mockResolvedValue({ isConfirmed: true })
 }));
 
-// Prevent axios interceptors from complaining in tests
+// Mock api module — getCurrentUser resolves by default (session exists)
+const mockGetCurrentUser = jest.fn();
+const mockLogoutUser = jest.fn();
 jest.mock('../services/api', () => ({
   api: {
-    defaults: { headers: { common: {} } },
     interceptors: {
       response: { use: jest.fn().mockReturnValue(1), eject: jest.fn() }
     }
   },
-  setAuthToken: jest.fn()
+  getCurrentUser: (...args) => mockGetCurrentUser(...args),
+  logoutUser: (...args) => mockLogoutUser(...args)
 }));
 
 function TestConsumer() {
@@ -25,7 +26,7 @@ function TestConsumer() {
     <div>
       <span data-testid="auth-state">{isAuthenticated ? 'authenticated' : 'unauthenticated'}</span>
       <span data-testid="user-email">{user?.email ?? 'none'}</span>
-      <button onClick={() => login({ userId: 1, email: 'admin@acme.com' }, 'Bearer tok')}>Login</button>
+      <button onClick={() => login({ userId: 1, email: 'admin@acme.com' })}>Login</button>
       <button onClick={() => logout()}>Logout</button>
     </div>
   );
@@ -42,55 +43,57 @@ function renderConsumer() {
 }
 
 describe('AuthContext', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
+  afterEach(() => jest.clearAllMocks());
 
-  test('starts unauthenticated when localStorage is empty', () => {
+  test('starts unauthenticated when /me returns 401 (no session cookie)', async () => {
+    mockGetCurrentUser.mockRejectedValue({ response: { status: 401 } });
     renderConsumer();
-    expect(screen.getByTestId('auth-state').textContent).toBe('unauthenticated');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-state').textContent).toBe('unauthenticated');
+    });
     expect(screen.getByTestId('user-email').textContent).toBe('none');
   });
 
-  test('login() stores token in localStorage and sets authenticated state', async () => {
+  test('login() sets authenticated state with user payload', async () => {
+    mockGetCurrentUser.mockRejectedValue({ response: { status: 401 } });
     renderConsumer();
+
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('unauthenticated'));
+
     await act(async () => {
       screen.getByRole('button', { name: 'Login' }).click();
     });
 
-    expect(localStorage.getItem('token')).toBe('Bearer tok');
-    expect(JSON.parse(localStorage.getItem('user'))).toMatchObject({ email: 'admin@acme.com' });
     expect(screen.getByTestId('auth-state').textContent).toBe('authenticated');
     expect(screen.getByTestId('user-email').textContent).toBe('admin@acme.com');
   });
 
-  test('logout() clears localStorage and resets to unauthenticated', async () => {
+  test('logout() calls logoutUser() and resets to unauthenticated', async () => {
+    mockGetCurrentUser.mockRejectedValue({ response: { status: 401 } });
+    mockLogoutUser.mockResolvedValue({});
     renderConsumer();
 
-    await act(async () => {
-      screen.getByRole('button', { name: 'Login' }).click();
-    });
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('unauthenticated'));
+
+    await act(async () => { screen.getByRole('button', { name: 'Login' }).click(); });
     expect(screen.getByTestId('auth-state').textContent).toBe('authenticated');
 
-    await act(async () => {
-      screen.getByRole('button', { name: 'Logout' }).click();
-    });
+    await act(async () => { screen.getByRole('button', { name: 'Logout' }).click(); });
 
-    expect(localStorage.getItem('token')).toBeNull();
-    expect(localStorage.getItem('user')).toBeNull();
+    expect(mockLogoutUser).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('auth-state').textContent).toBe('unauthenticated');
   });
 
-  test('hydrates user from localStorage on mount when token exists', async () => {
-    localStorage.setItem('token', 'Bearer existing-tok');
-    localStorage.setItem('user', JSON.stringify({ userId: 5, email: 'hydrated@acme.com' }));
-
+  test('hydrates user from /me on mount when a session cookie exists', async () => {
+    mockGetCurrentUser.mockResolvedValue({
+      data: { user: { userId: 5, email: 'hydrated@acme.com', tenantId: 2, roleId: 1 } }
+    });
     renderConsumer();
 
-    // Wait for the useEffect to run
-    await act(async () => {});
-
-    expect(screen.getByTestId('auth-state').textContent).toBe('authenticated');
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-state').textContent).toBe('authenticated');
+    });
     expect(screen.getByTestId('user-email').textContent).toBe('hydrated@acme.com');
   });
 });
