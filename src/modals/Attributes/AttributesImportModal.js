@@ -16,7 +16,8 @@ const AttributesImportModal = ({
   onInputChange,
   clients,
   selectedClientId,
-  onClientChange
+  onClientChange,
+  onDownloadSample
 }) => {
   return (
     <Modal show={show} onHide={onHide} size="xl">
@@ -31,6 +32,21 @@ const AttributesImportModal = ({
             <>
               <Alert variant="info">
                 Upload the file first to preview the data before submitting.
+                {onDownloadSample && (
+                  <>
+                    {' '}
+                    <Button
+                      variant="link"
+                      className="p-0 align-baseline"
+                      onClick={onDownloadSample}
+                      id="download-attributes-sample-button"
+                    >
+                      Download sample file
+                    </Button>
+                    {' '}
+                    (.xlsx with required columns: Control UID, Attribute Name, Attribute Description, Test Steps).
+                  </>
+                )}
               </Alert>
             </>
           )}

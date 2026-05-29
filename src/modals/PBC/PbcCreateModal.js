@@ -338,11 +338,13 @@ const PbcCreateModal = ({
                 )}
             </Form.Text>
             
-            {samples.map((sample, sampleIndex) => (
+            {samples.map((sample, sampleIndex) => {
+              const sampleNumber = existingSampleNames.length + sampleIndex + 1;
+              return (
               <Card key={sample.id} className="mb-3" style={{ border: '1px solid #dee2e6' }}>
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-center mb-2">
-                    <Form.Label className="mb-0 fw-bold">Sample {sampleIndex + 1}</Form.Label>
+                    <Form.Label className="mb-0 fw-bold">Sample {sampleNumber}</Form.Label>
                     {samples.length > 1 && (
                       <Button
                         variant="outline-danger"
@@ -360,7 +362,7 @@ const PbcCreateModal = ({
                     <Form.Label>Sample Name {mode === 'create' && <span className="text-danger">*</span>}</Form.Label>
                     <Form.Control
                       type="text"
-                      placeholder="e.g., Sample 1, Q1 Sample, etc."
+                      placeholder={`e.g., Sample ${sampleNumber}, Q1 Sample, etc.`}
                       value={sample.name}
                       onChange={(e) => updateSampleName(sample.id, e.target.value)}
                       disabled={loading}
@@ -406,7 +408,8 @@ const PbcCreateModal = ({
                   </Form.Group>
                 </Card.Body>
               </Card>
-            ))}
+            );
+            })}
           </Form.Group>
 
           {mode === 'edit' && (
